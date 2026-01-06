@@ -1,80 +1,152 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Candidate, CandidateSearchResponse } from '../../types/candidates';
 import {
     Search,
     Filter,
-    SlidersHorizontal,
     Phone,
     Eye,
     FileText,
-    ChevronDown,
     X,
     RefreshCw,
-    Users
+    Users,
+    AlertTriangle
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
+// API Base URL
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://sugukuru-api-1027796998462.asia-northeast1.run.app';
+
+// Person type from API
+interface Person {
+    person_id: string;
+    names: {
+        full_name: string;
+        full_name_kana?: string;
+        legal_last?: string;
+        legal_first?: string;
+    };
+    demographics: {
+        gender?: string;
+        nationality?: string;
+        date_of_birth?: string;
+    };
+    contact_info: {
+        email?: string;
+        phone?: string;
+    };
+    current_status: string;
+    current_status_notes?: string;
+    nationality?: string;
+    current_visa_type?: string;
+    visa_expiry_date?: string;
+    created_at: string;
+    updated_at?: string;
+}
+
 const nationalityLabels: Record<string, string> = {
-    vietnam: 'ベトナム',
     indonesia: 'インドネシア',
+    vietnam: 'ベトナム',
     philippines: 'フィリピン',
     myanmar: 'ミャンマー',
     china: '中国',
     cambodia: 'カンボジア',
     nepal: 'ネパール',
+    thailand: 'タイ',
+    インドネシア: 'インドネシア',
+    ベトナム: 'ベトナム',
+    フィリピン: 'フィリピン',
+    ミャンマー: 'ミャンマー',
+    中国: '中国',
     other: 'その他',
 };
 
+const statusLabels: Record<string, { label: string; color: string }> = {
+    monitoring: { label: '管理中', color: 'success' },
+    applying: { label: '申請中', color: 'warning' },
+    preparing: { label: '準備中', color: 'info' },
+    resigned: { label: '退職済み', color: 'danger' },
+    lost: { label: '失注', color: 'neutral' },
+    hold: { label: '保留', color: 'neutral' },
+};
+
 const visaLabels: Record<string, string> = {
+    '特定技能1号': '特定技能1号',
+    '特定技能2号': '特定技能2号',
+    '技能実習1号': '技能実習1号',
+    '技能実習2号': '技能実習2号',
+    '技能実習3号': '技能実習3号',
+    '特定活動': '特定活動',
     tokutei_gino_1: '特定技能1号',
     tokutei_gino_2: '特定技能2号',
-    gino_jisshu_1: '技能実習1号',
-    gino_jisshu_2: '技能実習2号',
-    gino_jisshu_3: '技能実習3号',
     other: 'その他',
 };
 
 export default function CandidatesPage() {
     const router = useRouter();
-    const [candidates, setCandidates] = useState<Candidate[]>([]);
+    const [people, setPeople] = useState<Person[]>([]);
+    const [filteredPeople, setFilteredPeople] = useState<Person[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [filters, setFilters] = useState({
         nationalities: [] as string[],
-        visaTypes: [] as string[],
+        statuses: [] as string[],
     });
     const [showFilters, setShowFilters] = useState(false);
-    const [totalCount, setTotalCount] = useState(0);
 
-    const fetchCandidates = useCallback(async () => {
+    const fetchPeople = useCallback(async () => {
         setLoading(true);
+        setError(null);
         try {
-            const params = new URLSearchParams();
-            if (searchQuery) params.append('keyword', searchQuery);
-            filters.nationalities.forEach(v => params.append('nationalities', v));
-            filters.visaTypes.forEach(v => params.append('visa_types', v));
-
-            const response = await fetch(`http://localhost:8000/api/v1/candidates/search?${params.toString()}`);
-            if (response.ok) {
-                const data: CandidateSearchResponse = await response.json();
-                setCandidates(data.results);
-                setTotalCount(data.results.length);
+            const response = await fetch(`${API_BASE}/api/v1/people/`);
+            if (!response.ok) {
+                throw new Error(`API Error: ${response.status}`);
             }
-        } catch (error) {
-            console.error('Failed to fetch candidates:', error);
+            const data: Person[] = await response.json();
+            setPeople(data);
+            setFilteredPeople(data);
+        } catch (err) {
+            console.error('Failed to fetch people:', err);
+            setError(err instanceof Error ? err.message : 'データの取得に失敗しました');
         } finally {
             setLoading(false);
         }
-    }, [searchQuery, filters]);
+    }, []);
+
+    // Apply filters and search
+    useEffect(() => {
+        let result = [...people];
+
+        // Search filter
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            result = result.filter(p =>
+                p.names.full_name?.toLowerCase().includes(query) ||
+                p.contact_info?.email?.toLowerCase().includes(query) ||
+                (p.demographics?.nationality || p.nationality || '').toLowerCase().includes(query)
+            );
+        }
+
+        // Nationality filter
+        if (filters.nationalities.length > 0) {
+            result = result.filter(p => {
+                const nat = (p.demographics?.nationality || p.nationality || '').toLowerCase();
+                return filters.nationalities.some(f => nat.includes(f.toLowerCase()));
+            });
+        }
+
+        // Status filter
+        if (filters.statuses.length > 0) {
+            result = result.filter(p => filters.statuses.includes(p.current_status));
+        }
+
+        setFilteredPeople(result);
+    }, [people, searchQuery, filters]);
 
     useEffect(() => {
-        const timer = setTimeout(() => {
-            fetchCandidates();
-        }, 300);
-        return () => clearTimeout(timer);
-    }, [fetchCandidates]);
+        fetchPeople();
+    }, [fetchPeople]);
 
     const toggleNationality = (nat: string) => {
         setFilters(prev => ({
@@ -85,21 +157,55 @@ export default function CandidatesPage() {
         }));
     };
 
-    const toggleVisaType = (visa: string) => {
+    const toggleStatus = (status: string) => {
         setFilters(prev => ({
             ...prev,
-            visaTypes: prev.visaTypes.includes(visa)
-                ? prev.visaTypes.filter(v => v !== visa)
-                : [...prev.visaTypes, visa]
+            statuses: prev.statuses.includes(status)
+                ? prev.statuses.filter(s => s !== status)
+                : [...prev.statuses, status]
         }));
     };
 
     const clearFilters = () => {
-        setFilters({ nationalities: [], visaTypes: [] });
+        setFilters({ nationalities: [], statuses: [] });
         setSearchQuery('');
     };
 
-    const activeFilterCount = filters.nationalities.length + filters.visaTypes.length;
+    const activeFilterCount = filters.nationalities.length + filters.statuses.length;
+
+    // Calculate days until visa expiry
+    const getDaysUntilExpiry = (expiryDate?: string): number | null => {
+        if (!expiryDate) return null;
+        const expiry = new Date(expiryDate);
+        const today = new Date();
+        const diff = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        return diff;
+    };
+
+    // Format date
+    const formatDate = (dateStr?: string): string => {
+        if (!dateStr) return '-';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    };
+
+    if (error) {
+        return (
+            <div className="min-h-[400px] flex items-center justify-center">
+                <div className="text-center bg-white p-8 rounded-xl shadow-lg">
+                    <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                    <h2 className="text-xl font-bold text-gray-800 mb-2">エラーが発生しました</h2>
+                    <p className="text-gray-600 mb-4">{error}</p>
+                    <button
+                        onClick={fetchPeople}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    >
+                        再試行
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6 animate-fadeIn">
@@ -107,7 +213,7 @@ export default function CandidatesPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">人材管理</h1>
-                    <p className="text-gray-500 mt-1">特定技能人材のデータベースとスキルマッチング</p>
+                    <p className="text-gray-500 mt-1">特定技能人材のデータベース（{people.length}名登録）</p>
                 </div>
                 <button className="btn btn-primary">
                     + 新規人材登録
@@ -124,7 +230,7 @@ export default function CandidatesPage() {
                             type="text"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="名前、スキル、国籍で検索..."
+                            placeholder="名前、メール、国籍で検索..."
                             className="input pl-10"
                         />
                     </div>
@@ -149,10 +255,11 @@ export default function CandidatesPage() {
                             )}
                         </button>
                         <button
-                            onClick={fetchCandidates}
+                            onClick={fetchPeople}
                             className="btn btn-secondary"
+                            disabled={loading}
                         >
-                            <RefreshCw className="w-4 h-4" />
+                            <RefreshCw className={clsx("w-4 h-4", loading && "animate-spin")} />
                         </button>
                     </div>
                 </div>
@@ -166,7 +273,7 @@ export default function CandidatesPage() {
                                 国籍
                             </label>
                             <div className="flex flex-wrap gap-2">
-                                {Object.entries(nationalityLabels).map(([key, label]) => (
+                                {['indonesia', 'vietnam', 'philippines', 'myanmar', 'china'].map((key) => (
                                     <button
                                         key={key}
                                         onClick={() => toggleNationality(key)}
@@ -177,25 +284,25 @@ export default function CandidatesPage() {
                                                 : "bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
                                         )}
                                     >
-                                        {label}
+                                        {nationalityLabels[key] || key}
                                     </button>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Visa Type Filter */}
+                        {/* Status Filter */}
                         <div>
                             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">
-                                在留資格
+                                ステータス
                             </label>
                             <div className="flex flex-wrap gap-2">
-                                {Object.entries(visaLabels).map(([key, label]) => (
+                                {Object.entries(statusLabels).map(([key, { label }]) => (
                                     <button
                                         key={key}
-                                        onClick={() => toggleVisaType(key)}
+                                        onClick={() => toggleStatus(key)}
                                         className={clsx(
                                             "px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                                            filters.visaTypes.includes(key)
+                                            filters.statuses.includes(key)
                                                 ? "bg-blue-100 text-blue-700 border border-blue-300"
                                                 : "bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200"
                                         )}
@@ -223,26 +330,27 @@ export default function CandidatesPage() {
             {/* Results Info */}
             <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500">
-                    <span className="font-semibold text-gray-900">{totalCount}</span> 件の人材
+                    <span className="font-semibold text-gray-900">{filteredPeople.length}</span> 件の人材
+                    {filteredPeople.length !== people.length && (
+                        <span className="text-gray-400 ml-1">（全{people.length}件中）</span>
+                    )}
                 </span>
-                <select className="text-sm text-gray-600 bg-transparent border-none cursor-pointer">
-                    <option>名前順</option>
-                    <option>登録日順</option>
-                    <option>ビザ期限順</option>
-                </select>
             </div>
 
             {/* Candidate Table */}
             {loading ? (
                 <div className="flex items-center justify-center py-20">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+                    <div className="text-center">
+                        <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-4" />
+                        <p className="text-gray-500">データを読み込み中...</p>
+                    </div>
                 </div>
-            ) : candidates.length === 0 ? (
+            ) : filteredPeople.length === 0 ? (
                 <div className="card p-12 text-center">
                     <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Users className="w-8 h-8 text-gray-400" />
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">候補者が見つかりません</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">人材が見つかりません</h3>
                     <p className="text-gray-500 mb-4">検索条件を変更してみてください</p>
                     <button onClick={clearFilters} className="btn btn-secondary">
                         フィルターをクリア
@@ -256,109 +364,132 @@ export default function CandidatesPage() {
                                 <th>名前</th>
                                 <th>国籍</th>
                                 <th>在留資格</th>
-                                <th>年齢</th>
                                 <th>ステータス</th>
                                 <th>ビザ期限</th>
+                                <th>メール</th>
                                 <th className="text-right">アクション</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {candidates.map((candidate) => (
-                                <tr
-                                    key={candidate.personId}
-                                    className="cursor-pointer"
-                                    onClick={() => router.push(`/candidates/${candidate.personId}`)}
-                                >
-                                    <td>
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center">
-                                                <span className="text-blue-700 font-semibold text-sm">
-                                                    {(candidate.fullName || '?').charAt(0)}
-                                                </span>
+                            {filteredPeople.map((person) => {
+                                const daysUntil = getDaysUntilExpiry(person.visa_expiry_date);
+                                const nationality = person.demographics?.nationality || person.nationality || '';
+                                const statusInfo = statusLabels[person.current_status] || { label: person.current_status, color: 'neutral' };
+
+                                return (
+                                    <tr
+                                        key={person.person_id}
+                                        className="cursor-pointer hover:bg-gray-50"
+                                        onClick={() => router.push(`/candidates/${person.person_id}`)}
+                                    >
+                                        <td>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center">
+                                                    <span className="text-blue-700 font-semibold text-sm">
+                                                        {(person.names.full_name || '?').charAt(0)}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <div className="font-medium text-gray-900">{person.names.full_name}</div>
+                                                    {person.names.full_name_kana && (
+                                                        <div className="text-xs text-gray-500">{person.names.full_name_kana}</div>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div>
-                                                <div className="font-medium text-gray-900">{candidate.fullName}</div>
-                                                {candidate.fullNameKana && (
-                                                    <div className="text-xs text-gray-500">{candidate.fullNameKana}</div>
+                                        </td>
+                                        <td>
+                                            <span className="badge badge-neutral">
+                                                {nationalityLabels[nationality.toLowerCase()] || nationality || '-'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span className="text-sm text-gray-700">
+                                                {visaLabels[person.current_visa_type || ''] || person.current_visa_type || '-'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span className={clsx(
+                                                "badge",
+                                                statusInfo.color === 'success' && "badge-success",
+                                                statusInfo.color === 'warning' && "badge-warning",
+                                                statusInfo.color === 'danger' && "badge-danger",
+                                                statusInfo.color === 'info' && "bg-blue-100 text-blue-700",
+                                                statusInfo.color === 'neutral' && "badge-neutral"
+                                            )}>
+                                                {statusInfo.label}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div className="text-sm">
+                                                {person.visa_expiry_date ? (
+                                                    <>
+                                                        <div className="text-gray-700">{formatDate(person.visa_expiry_date)}</div>
+                                                        {daysUntil !== null && daysUntil <= 90 && (
+                                                            <div className={clsx(
+                                                                "text-xs font-medium",
+                                                                daysUntil <= 30 ? "text-red-600" : "text-amber-600"
+                                                            )}>
+                                                                {daysUntil <= 0 ? '期限切れ' : `残り${daysUntil}日`}
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <span className="text-gray-400">-</span>
                                                 )}
                                             </div>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span className="badge badge-neutral">
-                                            {nationalityLabels[candidate.nationality] || candidate.nationality}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span className="text-sm text-gray-700">
-                                            {visaLabels[candidate.visaType] || candidate.visaType}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span className="text-sm text-gray-700">
-                                            {candidate.age ? `${candidate.age}歳` : '-'}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span className={clsx(
-                                            "badge",
-                                            candidate.availability === 'available' && "badge-success",
-                                            candidate.availability === 'ending_soon' && "badge-warning",
-                                            candidate.availability === 'assigned' && "badge-neutral"
-                                        )}>
-                                            {candidate.availabilityLabel || candidate.availability}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <div className="text-sm">
-                                            {candidate.visaValidUntil ? (
-                                                <>
-                                                    <div className="text-gray-700">{candidate.visaValidUntil}</div>
-                                                    {candidate.daysUntilVisaExpiry !== undefined && candidate.daysUntilVisaExpiry <= 90 && (
-                                                        <div className={clsx(
-                                                            "text-xs font-medium",
-                                                            candidate.daysUntilVisaExpiry <= 30 ? "text-red-600" : "text-amber-600"
-                                                        )}>
-                                                            残り{candidate.daysUntilVisaExpiry}日
-                                                        </div>
-                                                    )}
-                                                </>
-                                            ) : (
-                                                <span className="text-gray-400">-</span>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="text-right">
-                                        <div className="flex items-center justify-end gap-2">
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); }}
-                                                className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
-                                                title="電話"
-                                            >
-                                                <Phone className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); router.push(`/candidates/${candidate.personId}`); }}
-                                                className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
-                                                title="詳細"
-                                            >
-                                                <Eye className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); }}
-                                                className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
-                                                title="提案書作成"
-                                            >
-                                                <FileText className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                                        </td>
+                                        <td>
+                                            <span className="text-sm text-gray-600">
+                                                {person.contact_info?.email || '-'}
+                                            </span>
+                                        </td>
+                                        <td className="text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); }}
+                                                    className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+                                                    title="電話"
+                                                >
+                                                    <Phone className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); router.push(`/candidates/${person.person_id}`); }}
+                                                    className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+                                                    title="詳細"
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); }}
+                                                    className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+                                                    title="書類"
+                                                >
+                                                    <FileText className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
             )}
+
+            {/* Data Source Info */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                <div className="flex items-center gap-3">
+                    <Users className="w-5 h-5 text-blue-600" />
+                    <div>
+                        <p className="text-sm font-medium text-blue-900">
+                            データソース: 本番API
+                        </p>
+                        <p className="text-xs text-blue-700 mt-0.5">
+                            最終更新: {new Date().toLocaleString('ja-JP')}
+                        </p>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
