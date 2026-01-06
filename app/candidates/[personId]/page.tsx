@@ -1,209 +1,413 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Head from 'next/head';
-import { Candidate } from '../../../types/candidates';
-import { ChevronLeft, MapPin, Briefcase, Calendar, Phone, Mail, Award, Clock, FileText, CheckCircle2 } from 'lucide-react';
+import {
+    ChevronLeft,
+    MapPin,
+    Briefcase,
+    Calendar,
+    Phone,
+    Mail,
+    Clock,
+    FileText,
+    RefreshCw,
+    AlertTriangle,
+    User,
+    Building,
+    CreditCard
+} from 'lucide-react';
+import { clsx } from 'clsx';
+
+// API Base URL
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://sugukuru-api-1027796998462.asia-northeast1.run.app';
+
+// Person type from API
+interface Person {
+    person_id: string;
+    names: {
+        full_name: string;
+        full_name_kana?: string;
+        legal_last?: string;
+        legal_first?: string;
+    };
+    demographics: {
+        gender?: string;
+        nationality?: string;
+        date_of_birth?: string;
+    };
+    contact_info: {
+        email?: string;
+        phone?: string;
+        address?: string;
+    };
+    current_status: string;
+    current_status_notes?: string;
+    nationality?: string;
+    current_visa_type?: string;
+    visa_expiry_date?: string;
+    date_of_birth?: string;
+    smarthr_crew_id?: string;
+    created_at: string;
+    updated_at?: string;
+}
+
+const nationalityLabels: Record<string, string> = {
+    indonesia: 'インドネシア',
+    vietnam: 'ベトナム',
+    philippines: 'フィリピン',
+    myanmar: 'ミャンマー',
+    china: '中国',
+    cambodia: 'カンボジア',
+    nepal: 'ネパール',
+    thailand: 'タイ',
+    インドネシア: 'インドネシア',
+    ベトナム: 'ベトナム',
+    フィリピン: 'フィリピン',
+};
+
+const statusLabels: Record<string, { label: string; color: string }> = {
+    monitoring: { label: '管理中', color: 'success' },
+    applying: { label: '申請中', color: 'warning' },
+    preparing: { label: '準備中', color: 'info' },
+    resigned: { label: '退職済み', color: 'danger' },
+    lost: { label: '失注', color: 'neutral' },
+    hold: { label: '保留', color: 'neutral' },
+};
 
 export default function CandidateDetailPage() {
     const params = useParams();
     const router = useRouter();
-    const [candidate, setCandidate] = useState<Candidate | null>(null);
+    const [person, setPerson] = useState<Person | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchPerson = async () => {
+        if (!params?.personId) return;
+
+        setLoading(true);
+        setError(null);
+
+        try {
+            // First try to get from people list and find by ID
+            const response = await fetch(`${API_BASE}/api/v1/people/`);
+            if (!response.ok) {
+                throw new Error(`API Error: ${response.status}`);
+            }
+            const people: Person[] = await response.json();
+            const found = people.find(p => p.person_id === params.personId);
+
+            if (found) {
+                setPerson(found);
+            } else {
+                setError('人材が見つかりませんでした');
+            }
+        } catch (err) {
+            console.error('Failed to fetch person:', err);
+            setError(err instanceof Error ? err.message : 'データの取得に失敗しました');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchDetail = async () => {
-            if (!params) return;
-            try {
-                const response = await fetch(`http://localhost:8000/api/v1/candidates/${params.personId}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    setCandidate(data);
-                }
-            } catch (error) {
-                console.error('Failed to fetch candidate details:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        if (params?.personId) fetchDetail();
-    }, [params]);
+        fetchPerson();
+    }, [params?.personId]);
+
+    // Calculate age from date of birth
+    const calculateAge = (dob?: string): number | null => {
+        if (!dob) return null;
+        const birthDate = new Date(dob);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        return age;
+    };
+
+    // Calculate days until visa expiry
+    const getDaysUntilExpiry = (expiryDate?: string): number | null => {
+        if (!expiryDate) return null;
+        const expiry = new Date(expiryDate);
+        const today = new Date();
+        const diff = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        return diff;
+    };
+
+    // Format date
+    const formatDate = (dateStr?: string): string => {
+        if (!dateStr) return '-';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    };
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" />
+            <div className="min-h-[400px] flex items-center justify-center">
+                <div className="text-center">
+                    <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-4" />
+                    <p className="text-gray-500">データを読み込み中...</p>
+                </div>
             </div>
         );
     }
 
-    if (!candidate) {
+    if (error || !person) {
         return (
-            <div className="min-h-screen bg-[#0a0a0c] text-white flex flex-col items-center justify-center space-y-4">
-                <p className="text-white/40">候補者が見つかりませんでした。</p>
-                <button onClick={() => router.back()} className="text-blue-400 font-bold uppercase tracking-widest text-xs">
-                    戻る
-                </button>
-            </div>
-        );
-    }
-
-    return (
-        <div className="min-h-screen bg-[#0a0a0c] text-white font-sans">
-            <Head>
-                <title>{candidate.fullName} | 候補者詳細 | スグクル3.0</title>
-            </Head>
-
-            {/* Top Navigation */}
-            <header className="sticky top-0 z-40 bg-[#0a0a0c]/80 backdrop-blur-xl border-b border-white/5 p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <button onClick={() => router.back()} className="p-2 hover:bg-white/5 rounded-full text-white/40">
-                        <ChevronLeft className="w-6 h-6" />
-                    </button>
-                    <h1 className="text-lg font-black tracking-tight">候補者プロファイル</h1>
-                </div>
-                <div className="flex gap-2">
-                    <button className="px-4 py-2 bg-blue-600/10 border border-blue-500/20 text-blue-400 rounded-xl text-[10px] font-black uppercase">
-                        一括提案に追加
-                    </button>
-                </div>
-            </header>
-
-            <main className="max-w-3xl mx-auto p-4 md:p-8 space-y-10 pb-20">
-                {/* Profile Header */}
-                <section className="flex flex-col md:flex-row items-center md:items-start gap-8">
-                    <div className="relative group">
-                        <div className="w-32 h-32 md:w-40 md:h-40 bg-white/5 rounded-[2.5rem] flex items-center justify-center border-2 border-white/10 overflow-hidden shadow-[0_0_50px_rgba(59,130,246,0.15)] transition-all group-hover:border-blue-500/50">
-                            {candidate.photoUrl ? (
-                                <img src={candidate.photoUrl} alt={candidate.fullName} className="w-full h-full object-cover" />
-                            ) : (
-                                <span className="text-5xl font-black text-white/10">{candidate.fullName[0]}</span>
-                            )}
-                        </div>
-                        <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-blue-500 border-4 border-[#0a0a0c] rounded-2xl flex items-center justify-center text-xl">
-                            ✅
-                        </div>
-                    </div>
-
-                    <div className="flex-1 text-center md:text-left space-y-2">
-                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">
-                            <Clock className="w-3 h-3" /> {candidate.availabilityLabel}
-                        </div>
-                        <h2 className="text-4xl font-black tracking-tighter italic">{candidate.fullName}</h2>
-                        <div className="flex flex-wrap justify-center md:justify-start items-center gap-4 text-sm font-bold text-white/40 italic">
-                            <span className="flex items-center gap-2 pt-1 border-t border-transparent group hover:border-white/10 transition-colors">
-                                <MapPin className="w-4 h-4" /> {candidate.nationalityName} • {candidate.age}歳
-                            </span>
-                            <span className="flex items-center gap-2">
-                                <FileText className="w-4 h-4" /> Visa: {candidate.visaTypeName}
-                            </span>
-                        </div>
-
-                        <div className="flex justify-center md:justify-start gap-4 mt-6">
-                            <a href={`tel:${candidate.phone}`} className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl flex items-center gap-3 transition-all active:scale-95">
-                                <Phone className="w-4 h-4 text-blue-400" />
-                                <span className="text-xs font-black uppercase tracking-widest">Call Now</span>
-                            </a>
-                            <button className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl flex items-center gap-3 transition-all active:scale-95">
-                                <Mail className="w-4 h-4 text-blue-400" />
-                                <span className="text-xs font-black uppercase tracking-widest">Message</span>
-                            </button>
-                        </div>
-                    </div>
-                </section>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                    {/* Left Column */}
-                    <div className="space-y-10">
-                        <section className="space-y-4">
-                            <h3 className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em]">Skill Set</h3>
-                            <div className="grid grid-cols-2 gap-3">
-                                {candidate.skillLabels.map(s => (
-                                    <div key={s} className="flex items-center gap-3 p-4 bg-white/[0.03] border border-white/5 rounded-2xl group hover:border-blue-500/30 transition-all">
-                                        <Award className="w-4 h-4 text-blue-500" />
-                                        <span className="text-xs font-bold">{s}</span>
-                                    </div>
-                                ))}
-                                {candidate.skillLabels.length === 0 && (
-                                    <p className="text-white/20 text-xs italic">スキル情報なし</p>
-                                )}
-                            </div>
-                        </section>
-
-                        <section className="space-y-4">
-                            <h3 className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em]">Work Preferences</h3>
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
-                                    <div className="flex items-center gap-3 text-white/40">
-                                        <MapPin className="w-4 h-4" />
-                                        <span className="text-xs font-black uppercase">希望地域</span>
-                                    </div>
-                                    <span className="text-sm font-bold">{candidate.preferredRegionLabels.join(' / ') || '全国可能'}</span>
-                                </div>
-                                <div className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
-                                    <div className="flex items-center gap-3 text-white/40">
-                                        <Clock className="w-4 h-4" />
-                                        <span className="text-xs font-black uppercase">希望時給</span>
-                                    </div>
-                                    <span className="text-sm font-bold text-blue-400">¥{candidate.expectedHourlyRate?.toLocaleString() || '---'}<span className="text-[10px] ml-1">/h〜</span></span>
-                                </div>
-                            </div>
-                        </section>
-                    </div>
-
-                    {/* Right Column */}
-                    <div className="space-y-10">
-                        <section className="space-y-4">
-                            <h3 className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em]">Immigration Status</h3>
-                            <div className="p-6 bg-[#1a1c22] border border-white/10 rounded-[2rem] space-y-6">
-                                <div className="space-y-2">
-                                    <div className="flex justify-between items-end">
-                                        <div>
-                                            <p className="text-[10px] font-black text-white/20 uppercase mb-1">Visa Expiry Date</p>
-                                            <p className="text-lg font-bold">{candidate.visaValidUntil || '---'}</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-[10px] font-black text-white/20 uppercase mb-1">Days Left</p>
-                                            <p className="text-2xl font-black text-blue-400 leading-none">{candidate.daysUntilVisaExpiry}</p>
-                                        </div>
-                                    </div>
-                                    <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)] transition-all duration-1000"
-                                            style={{ width: `${Math.min(100, (candidate.daysUntilVisaExpiry || 0) / 365 * 100)}%` }}
-                                        />
-                                    </div>
-                                </div>
-                                <button className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white/40 flex items-center justify-center gap-2 transition-all">
-                                    <Calendar className="w-4 h-4" /> ビザ更新履歴を見る
-                                </button>
-                            </div>
-                        </section>
-
-                        <section className="space-y-4">
-                            <h3 className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em]">Recent Placement</h3>
-                            <div className="p-6 bg-white/[0.03] border border-white/5 rounded-[2rem] flex items-center gap-4">
-                                <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center border border-blue-500/20">
-                                    <Briefcase className="w-6 h-6 text-blue-500" />
-                                </div>
-                                <div>
-                                    <p className="text-sm font-bold">鹿児島第一食品工場</p>
-                                    <p className="text-[10px] font-black text-white/20 uppercase">2024.08 - 2024.12 • 満了</p>
-                                </div>
-                            </div>
-                        </section>
-                    </div>
-                </div>
-
-                {/* Footer Actions */}
-                <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#0a0a0c] to-transparent pointer-events-none">
-                    <div className="max-w-xl mx-auto flex gap-4 pointer-events-auto">
-                        <button className="flex-1 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-3xl font-black text-xs uppercase tracking-[0.2em] shadow-[0_20px_40px_rgba(37,99,235,0.3)] transition-all hover:-translate-y-1 active:scale-95">
-                            提案リストに追加
+            <div className="min-h-[400px] flex items-center justify-center">
+                <div className="text-center bg-white p-8 rounded-xl shadow-lg">
+                    <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                    <h2 className="text-xl font-bold text-gray-800 mb-2">
+                        {error || '人材が見つかりませんでした'}
+                    </h2>
+                    <p className="text-gray-600 mb-4">ID: {params?.personId}</p>
+                    <div className="flex gap-3 justify-center">
+                        <button
+                            onClick={() => router.back()}
+                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+                        >
+                            戻る
+                        </button>
+                        <button
+                            onClick={fetchPerson}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                        >
+                            再試行
                         </button>
                     </div>
                 </div>
-            </main>
+            </div>
+        );
+    }
+
+    const nationality = person.demographics?.nationality || person.nationality || '';
+    const statusInfo = statusLabels[person.current_status] || { label: person.current_status, color: 'neutral' };
+    const age = calculateAge(person.date_of_birth || person.demographics?.date_of_birth);
+    const daysUntilExpiry = getDaysUntilExpiry(person.visa_expiry_date);
+
+    return (
+        <div className="space-y-6 animate-fadeIn">
+            {/* Back Navigation */}
+            <div className="flex items-center gap-4">
+                <button
+                    onClick={() => router.back()}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition"
+                >
+                    <ChevronLeft className="w-5 h-5 text-gray-600" />
+                </button>
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">人材詳細</h1>
+                    <p className="text-gray-500 text-sm">プロファイル情報</p>
+                </div>
+            </div>
+
+            {/* Profile Header Card */}
+            <div className="card p-6">
+                <div className="flex flex-col md:flex-row gap-6">
+                    {/* Avatar */}
+                    <div className="flex-shrink-0">
+                        <div className="w-24 h-24 bg-blue-100 rounded-2xl flex items-center justify-center">
+                            <span className="text-3xl font-bold text-blue-600">
+                                {person.names.full_name?.charAt(0) || '?'}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 space-y-4">
+                        <div>
+                            <div className="flex items-center gap-3 flex-wrap">
+                                <h2 className="text-2xl font-bold text-gray-900">
+                                    {person.names.full_name}
+                                </h2>
+                                <span className={clsx(
+                                    "badge",
+                                    statusInfo.color === 'success' && "badge-success",
+                                    statusInfo.color === 'warning' && "badge-warning",
+                                    statusInfo.color === 'danger' && "badge-danger",
+                                    statusInfo.color === 'info' && "bg-blue-100 text-blue-700",
+                                    statusInfo.color === 'neutral' && "badge-neutral"
+                                )}>
+                                    {statusInfo.label}
+                                </span>
+                            </div>
+                            {person.names.full_name_kana && (
+                                <p className="text-gray-500 mt-1">{person.names.full_name_kana}</p>
+                            )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-4 text-sm">
+                            <div className="flex items-center gap-2 text-gray-600">
+                                <MapPin className="w-4 h-4" />
+                                <span>{nationalityLabels[nationality.toLowerCase()] || nationality || '未設定'}</span>
+                            </div>
+                            {age && (
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <User className="w-4 h-4" />
+                                    <span>{age}歳</span>
+                                </div>
+                            )}
+                            <div className="flex items-center gap-2 text-gray-600">
+                                <FileText className="w-4 h-4" />
+                                <span>{person.current_visa_type || '在留資格未設定'}</span>
+                            </div>
+                        </div>
+
+                        {/* Contact Buttons */}
+                        <div className="flex gap-3 pt-2">
+                            {person.contact_info?.phone && (
+                                <a
+                                    href={`tel:${person.contact_info.phone}`}
+                                    className="btn btn-secondary flex items-center gap-2"
+                                >
+                                    <Phone className="w-4 h-4" />
+                                    電話
+                                </a>
+                            )}
+                            {person.contact_info?.email && (
+                                <a
+                                    href={`mailto:${person.contact_info.email}`}
+                                    className="btn btn-secondary flex items-center gap-2"
+                                >
+                                    <Mail className="w-4 h-4" />
+                                    メール
+                                </a>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Info Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Visa Status Card */}
+                <div className="card p-6">
+                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
+                        在留ステータス
+                    </h3>
+
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">在留資格</span>
+                            <span className="font-semibold">{person.current_visa_type || '-'}</span>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">期限日</span>
+                            <span className="font-semibold">{formatDate(person.visa_expiry_date)}</span>
+                        </div>
+
+                        {daysUntilExpiry !== null && (
+                            <div className="pt-2">
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-gray-600">残り日数</span>
+                                    <span className={clsx(
+                                        "font-bold",
+                                        daysUntilExpiry <= 30 ? "text-red-600" :
+                                            daysUntilExpiry <= 90 ? "text-amber-600" : "text-green-600"
+                                    )}>
+                                        {daysUntilExpiry <= 0 ? '期限切れ' : `${daysUntilExpiry}日`}
+                                    </span>
+                                </div>
+                                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                    <div
+                                        className={clsx(
+                                            "h-full rounded-full transition-all",
+                                            daysUntilExpiry <= 30 ? "bg-red-500" :
+                                                daysUntilExpiry <= 90 ? "bg-amber-500" : "bg-green-500"
+                                        )}
+                                        style={{ width: `${Math.min(100, Math.max(0, daysUntilExpiry / 365 * 100))}%` }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Contact Info Card */}
+                <div className="card p-6">
+                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
+                        連絡先情報
+                    </h3>
+
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <Mail className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500">メールアドレス</p>
+                                <p className="font-medium">{person.contact_info?.email || '-'}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                <Phone className="w-5 h-5 text-green-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500">電話番号</p>
+                                <p className="font-medium">{person.contact_info?.phone || '-'}</p>
+                            </div>
+                        </div>
+
+                        {person.smarthr_crew_id && (
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                                    <CreditCard className="w-5 h-5 text-purple-600" />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-gray-500">SmartHR ID</p>
+                                    <p className="font-medium">{person.smarthr_crew_id}</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Status Notes */}
+            {person.current_status_notes && (
+                <div className="card p-6">
+                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
+                        ステータスメモ
+                    </h3>
+                    <p className="text-gray-700 whitespace-pre-wrap">{person.current_status_notes}</p>
+                </div>
+            )}
+
+            {/* Metadata */}
+            <div className="card p-6 bg-gray-50">
+                <div className="flex flex-wrap gap-6 text-sm text-gray-500">
+                    <div>
+                        <span className="text-gray-400">登録日:</span>{' '}
+                        <span>{formatDate(person.created_at)}</span>
+                    </div>
+                    <div>
+                        <span className="text-gray-400">更新日:</span>{' '}
+                        <span>{formatDate(person.updated_at)}</span>
+                    </div>
+                    <div>
+                        <span className="text-gray-400">ID:</span>{' '}
+                        <span className="font-mono text-xs">{person.person_id}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="flex gap-4">
+                <button
+                    onClick={() => router.back()}
+                    className="btn btn-secondary"
+                >
+                    <ChevronLeft className="w-4 h-4" />
+                    一覧に戻る
+                </button>
+                <button className="btn btn-primary">
+                    編集
+                </button>
+            </div>
         </div>
     );
 }
