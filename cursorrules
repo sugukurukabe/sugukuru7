@@ -1,0 +1,76 @@
+# =============================================================================
+# SUGUKURU Platform v7.0 - Cursor AI Configuration
+# =============================================================================
+
+## 🎯 Project Overview
+
+project_name: SUGUKURU Platform
+version: "7.0 Final"
+description: |
+  外国人人材管理プラットフォーム（GCP）
+  - SmartHR + Slackリスト + ショウダナプリ データ統合
+  - 日次稼働・売上リアルタイム管理
+  - 派遣シミュレーション
+  - 入管届出自動化（14日ルール）
+
+## 📚 Primary Reference
+
+primary_reference: "SUGUKURU_FINAL_v7.md"
+recommended_model: "Claude Sonnet 4.5"
+
+## 🛠️ Tech Stack
+
+backend:
+  language: Python 3.11+
+  framework: FastAPI
+  database: PostgreSQL 15 (Cloud SQL)
+  orm: SQLAlchemy 2.0 + asyncpg
+
+frontend:
+  language: TypeScript 5+
+  framework: Next.js 14 (App Router)
+  styling: Tailwind CSS
+  components: shadcn/ui
+  drag_drop: "@dnd-kit/core, @hello-pangea/dnd"
+  charts: Recharts
+
+## ⚠️ Critical Business Rules
+
+### 売上計算
+- 日次売上 = 時間単価 × 基本労働時間 × 人数
+- 残業 = 時間単価 × 残業時間 × 1.25
+- 免許持ちは別単価（hourly_rate_with_license）
+
+### 入管届出
+- 14日期限は絶対
+- 色分け: 🔴超過 🟠3日以内 🟡7日以内 🟢余裕
+
+### データ統合
+- 企業名は organization_aliases で正規化
+- SmartHR crew_id で人材マッチング
+- Slackリストは名前でマッチング
+
+## 📁 Key Tables
+
+- people: 人材マスタ（SmartHR + Slack統合）
+- organizations: 企業マスタ（単価設定含む）
+- organization_aliases: 企業名正規化
+- daily_operations: 日次稼働（売上自動計算）
+- daily_revenue_summary: 売上サマリー
+- dispatch_slots: 週別配置スロット
+- visa_cases: ビザ申請案件
+- immigration_notices: 入管届出
+
+## 🔧 Commands
+
+start_api: "uvicorn src.api.main:app --reload"
+start_web: "cd src/web && npm run dev"
+migrate: "python -m alembic upgrade head"
+
+## 🚀 Initial Prompt
+
+@SUGUKURU_FINAL_v7.md を参照して実装開始：
+1. organization_aliases（企業名正規化）
+2. Slackリストインポート機能
+3. 日次稼働ダッシュボード（売上計算付き）
+4. 派遣週別ボード（シミュレーション機能）

@@ -1,0 +1,281 @@
+"use client";
+import React, { useState, useEffect } from 'react';
+import {
+    Calendar,
+    ChevronLeft,
+    ChevronRight,
+    Play,
+    Save,
+    X,
+    AlertTriangle,
+    Users,
+    BarChart3,
+    RefreshCw
+} from 'lucide-react';
+import { clsx } from 'clsx';
+
+interface WorkerSlot {
+    personId: string;
+    name: string;
+    status: 'confirmed' | 'tentative' | 'vacant';
+}
+
+interface ClientDay {
+    date: string;
+    dayOfWeek: string;
+    slots: WorkerSlot[];
+    required: number;
+}
+
+interface ClientRow {
+    clientId: string;
+    clientName: string;
+    region: string;
+    days: ClientDay[];
+}
+
+export default function DispatchBoardPage() {
+    const [weekStart, setWeekStart] = useState('2025-01-27');
+    const [data, setData] = useState<ClientRow[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [isSimulating, setIsSimulating] = useState(false);
+
+    useEffect(() => {
+        // Fetch dispatch grid data
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const response = await fetch(`http://localhost:8000/api/v1/dispatch/grid?week_start=${weekStart}`);
+                if (response.ok) {
+                    const apiData = await response.json();
+                    setData(apiData.clients || []);
+                } else {
+                    // Mock data for development
+                    setData(mockData);
+                }
+            } catch (error) {
+                console.error('Failed to fetch dispatch data:', error);
+                setData(mockData);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, [weekStart]);
+
+    // Mock data
+    const mockData: ClientRow[] = [
+        {
+            clientId: '1',
+            clientName: '片平農産',
+            region: '鹿児島市',
+            days: [
+                { date: '2025-01-27', dayOfWeek: '月', slots: [{ personId: '1', name: 'GARCIA', status: 'confirmed' }], required: 2 },
+                { date: '2025-01-28', dayOfWeek: '火', slots: [], required: 2 },
+                { date: '2025-01-29', dayOfWeek: '水', slots: [{ personId: '2', name: 'NGUYEN', status: 'confirmed' }], required: 2 },
+                { date: '2025-01-30', dayOfWeek: '木', slots: [{ personId: '1', name: 'GARCIA', status: 'confirmed' }], required: 2 },
+                { date: '2025-01-31', dayOfWeek: '金', slots: [{ personId: '1', name: 'GARCIA', status: 'confirmed' }], required: 2 },
+            ]
+        },
+        {
+            clientId: '2',
+            clientName: '南九州ファーム',
+            region: '指宿市',
+            days: [
+                { date: '2025-01-27', dayOfWeek: '月', slots: [{ personId: '3', name: 'TRAN', status: 'confirmed' }, { personId: '4', name: 'PHAM', status: 'tentative' }], required: 3 },
+                { date: '2025-01-28', dayOfWeek: '火', slots: [{ personId: '3', name: 'TRAN', status: 'confirmed' }], required: 3 },
+                { date: '2025-01-29', dayOfWeek: '水', slots: [{ personId: '3', name: 'TRAN', status: 'confirmed' }, { personId: '4', name: 'PHAM', status: 'confirmed' }], required: 3 },
+                { date: '2025-01-30', dayOfWeek: '木', slots: [{ personId: '3', name: 'TRAN', status: 'confirmed' }], required: 3 },
+                { date: '2025-01-31', dayOfWeek: '金', slots: [{ personId: '3', name: 'TRAN', status: 'confirmed' }, { personId: '4', name: 'PHAM', status: 'confirmed' }], required: 3 },
+            ]
+        }
+    ];
+
+    const weekDays = ['月', '火', '水', '木', '金'];
+
+    const getStatusColor = (status: string) => {
+        switch (status) {
+            case 'confirmed': return 'bg-green-100 text-green-800 border-green-200';
+            case 'tentative': return 'bg-amber-100 text-amber-800 border-amber-200';
+            default: return 'bg-gray-100 text-gray-600 border-gray-200';
+        }
+    };
+
+    const calculateFillRate = () => {
+        let filled = 0;
+        let total = 0;
+        data.forEach(client => {
+            client.days.forEach(day => {
+                total += day.required;
+                filled += day.slots.length;
+            });
+        });
+        return total > 0 ? ((filled / total) * 100).toFixed(1) : '0';
+    };
+
+    return (
+        <div className="space-y-6 animate-fadeIn">
+            {/* Simulation Banner */}
+            {isSimulating && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <AlertTriangle className="w-5 h-5 text-amber-600" />
+                        <div>
+                            <span className="font-semibold text-amber-800">シミュレーション中</span>
+                            <span className="text-amber-700 ml-2">変更は保存されていません</span>
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setIsSimulating(false)}
+                            className="btn btn-secondary text-sm"
+                        >
+                            <X className="w-4 h-4 mr-1" /> 破棄
+                        </button>
+                        <button className="btn btn-primary text-sm">
+                            <Save className="w-4 h-4 mr-1" /> 本番適用
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Page Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900">配置管理</h1>
+                    <p className="text-gray-500 mt-1">週次の人員配置とシミュレーション</p>
+                </div>
+                <div className="flex items-center gap-3">
+                    {/* Week Navigator */}
+                    <div className="flex items-center bg-white border border-gray-200 rounded-lg">
+                        <button className="p-2 hover:bg-gray-50 border-r border-gray-200">
+                            <ChevronLeft className="w-5 h-5 text-gray-600" />
+                        </button>
+                        <div className="px-4 py-2 font-medium text-gray-900">
+                            2025年1月 第4週
+                        </div>
+                        <button className="p-2 hover:bg-gray-50 border-l border-gray-200">
+                            <ChevronRight className="w-5 h-5 text-gray-600" />
+                        </button>
+                    </div>
+
+                    {!isSimulating && (
+                        <button
+                            onClick={() => setIsSimulating(true)}
+                            className="btn btn-primary"
+                        >
+                            <Play className="w-4 h-4 mr-2" />
+                            シミュレーション開始
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Stats Row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="card p-4 flex items-center gap-4">
+                    <div className="p-3 bg-blue-100 rounded-xl">
+                        <BarChart3 className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div>
+                        <div className="text-2xl font-bold text-gray-900">{calculateFillRate()}%</div>
+                        <div className="text-sm text-gray-500">充足率</div>
+                    </div>
+                </div>
+                <div className="card p-4 flex items-center gap-4">
+                    <div className="p-3 bg-green-100 rounded-xl">
+                        <Users className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div>
+                        <div className="text-2xl font-bold text-gray-900">48<span className="text-base text-gray-400">/52</span></div>
+                        <div className="text-sm text-gray-500">稼働人数</div>
+                    </div>
+                </div>
+                <div className="card p-4 flex items-center gap-4">
+                    <div className="p-3 bg-amber-100 rounded-xl">
+                        <AlertTriangle className="w-6 h-6 text-amber-600" />
+                    </div>
+                    <div>
+                        <div className="text-2xl font-bold text-gray-900">4</div>
+                        <div className="text-sm text-gray-500">未配置スロット</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Dispatch Grid */}
+            {loading ? (
+                <div className="flex items-center justify-center py-20">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+                </div>
+            ) : (
+                <div className="card overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="bg-gray-50 border-b border-gray-200">
+                                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-48">
+                                        派遣先
+                                    </th>
+                                    {weekDays.map((day, idx) => (
+                                        <th key={idx} className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                            {day}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {data.map((client) => (
+                                    <tr key={client.clientId} className="border-b border-gray-100 hover:bg-gray-50">
+                                        <td className="px-4 py-3">
+                                            <div className="font-medium text-gray-900">{client.clientName}</div>
+                                            <div className="text-xs text-gray-500">{client.region}</div>
+                                        </td>
+                                        {client.days.map((day, idx) => (
+                                            <td key={idx} className="px-2 py-3 text-center">
+                                                <div className="min-h-[60px] flex flex-col gap-1 items-center justify-center">
+                                                    {day.slots.length > 0 ? (
+                                                        day.slots.map((slot, si) => (
+                                                            <span
+                                                                key={si}
+                                                                className={clsx(
+                                                                    "px-2 py-1 text-xs font-medium rounded border cursor-pointer hover:shadow-sm transition-shadow",
+                                                                    getStatusColor(slot.status)
+                                                                )}
+                                                            >
+                                                                {slot.name}
+                                                            </span>
+                                                        ))
+                                                    ) : (
+                                                        <span className="text-gray-300 text-xs">空き</span>
+                                                    )}
+                                                    {day.slots.length < day.required && (
+                                                        <span className="text-xs text-amber-600">
+                                                            +{day.required - day.slots.length}必要
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Smart Advice */}
+            <div className="card bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+                <div className="p-5">
+                    <h3 className="font-semibold text-gray-900 mb-2">💡 スマート配置アドバイス</h3>
+                    <p className="text-sm text-gray-600 mb-3">
+                        片平農産の火曜日に1名欠員があります。鹿児島市在住の GARCIA さんを配置することをお勧めします。
+                    </p>
+                    <button className="btn btn-primary text-sm">
+                        提案を採用する
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}

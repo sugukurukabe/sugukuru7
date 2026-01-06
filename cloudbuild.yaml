@@ -1,0 +1,39 @@
+steps:
+  # Build API image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/sugukuru/sugukuru-api:latest'
+      - '-f'
+      - 'Dockerfile.api'
+      - '.'
+
+  # Build Web image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/sugukuru/sugukuru-web:latest'
+      - '-f'
+      - 'Dockerfile.web'
+      - '.'
+
+  # Push API image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/sugukuru/sugukuru-api:latest'
+
+  # Push Web image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/sugukuru/sugukuru-web:latest'
+
+images:
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/sugukuru/sugukuru-api:latest'
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/sugukuru/sugukuru-web:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

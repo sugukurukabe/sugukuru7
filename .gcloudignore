@@ -1,0 +1,11 @@
+.git
+.next
+node_modules
+.env
+.env.local
+.terraform
+terraform.tfstate*
+*.log
+.DS_Store
+deploy/*.sh
+!deploy/finalize_deploy.sh
