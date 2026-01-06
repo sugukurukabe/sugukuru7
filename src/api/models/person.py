@@ -56,6 +56,12 @@ class Person(Base):
     demographics = Column(JSONB, default={})  # birth_date, gender, nationality
     contact_info = Column(JSONB, default={})  # email, phone, address
     
+    # インポート用の直接カラム（019マイグレーションで追加）
+    nationality = Column(String(50))  # 国籍 (indonesia, vietnam, etc.)
+    date_of_birth = Column(DateTime)  # 生年月日
+    current_visa_type = Column(String(50))  # 現在の在留資格
+    visa_expiry_date = Column(DateTime)  # 在留期限
+    
     current_status = Column(
         Enum('monitoring', 'applying', 'preparing', 'received', 'lost', 'resigned', 'resigned_planned', 'overseas_waiting', name='person_status'), 
         default="monitoring"

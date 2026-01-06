@@ -1,0 +1,84 @@
+# Cloud Monitoring アラートポリシー設定
+# SUGUKURU 本番環境用
+
+---
+# 1. API エラー率アラート
+displayName: "SUGUKURU API - High Error Rate"
+combiner: OR
+conditions:
+  - displayName: "API Error Rate > 1%"
+    conditionThreshold:
+      filter: 'resource.type="cloud_run_revision" AND resource.labels.service_name="sugukuru-api" AND metric.type="run.googleapis.com/request_count" AND metric.labels.response_code_class!="2xx"'
+      comparison: COMPARISON_GT
+      thresholdValue: 0.01
+      duration: 300s
+      aggregations:
+        - alignmentPeriod: 60s
+          perSeriesAligner: ALIGN_RATE
+          crossSeriesReducer: REDUCE_SUM
+          groupByFields:
+            - resource.labels.service_name
+notificationChannels: []
+alertStrategy:
+  autoClose: 604800s
+documentation:
+  content: |
+    SUGUKURU API でエラー率が1%を超えました。
+    
+    確認事項:
+    1. Cloud Run ログを確認
+    2. Database 接続状態を確認
+    3. 最近のデプロイを確認
+
+---
+# 2. API レイテンシアラート
+displayName: "SUGUKURU API - High Latency"
+combiner: OR
+conditions:
+  - displayName: "API Latency > 2s"
+    conditionThreshold:
+      filter: 'resource.type="cloud_run_revision" AND resource.labels.service_name="sugukuru-api" AND metric.type="run.googleapis.com/request_latencies"'
+      comparison: COMPARISON_GT
+      thresholdValue: 2000
+      duration: 300s
+      aggregations:
+        - alignmentPeriod: 60s
+          perSeriesAligner: ALIGN_PERCENTILE_95
+          crossSeriesReducer: REDUCE_MEAN
+notificationChannels: []
+alertStrategy:
+  autoClose: 604800s
+documentation:
+  content: |
+    SUGUKURU API のレイテンシが2秒を超えました。
+    
+    確認事項:
+    1. Database クエリパフォーマンス
+    2. Cloud Run インスタンス数
+    3. N+1 問題などのコード問題
+
+---
+# 3. Cloud SQL CPU 使用率アラート
+displayName: "SUGUKURU DB - High CPU Usage"
+combiner: OR
+conditions:
+  - displayName: "DB CPU > 80%"
+    conditionThreshold:
+      filter: 'resource.type="cloudsql_database" AND metadata.user_labels.instance="sugukuru7-db" AND metric.type="cloudsql.googleapis.com/database/cpu/utilization"'
+      comparison: COMPARISON_GT
+      thresholdValue: 0.8
+      duration: 300s
+      aggregations:
+        - alignmentPeriod: 60s
+          perSeriesAligner: ALIGN_MEAN
+notificationChannels: []
+alertStrategy:
+  autoClose: 604800s
+documentation:
+  content: |
+    Cloud SQL のCPU使用率が80%を超えました。
+    
+    対応:
+    1. 重いクエリの特定
+    2. インスタンスサイズのアップグレード検討
+    3. キャッシュの導入検討

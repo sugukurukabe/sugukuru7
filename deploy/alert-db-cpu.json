@@ -1,0 +1,31 @@
+{
+    "displayName": "SUGUKURU DB CPU Usage Alert",
+    "combiner": "OR",
+    "conditions": [
+        {
+            "displayName": "DB CPU Usage > 80%",
+            "conditionThreshold": {
+                "filter": "resource.type=\"cloudsql_database\" AND metric.type=\"cloudsql.googleapis.com/database/cpu/utilization\"",
+                "comparison": "COMPARISON_GT",
+                "thresholdValue": 0.8,
+                "duration": "300s",
+                "aggregations": [
+                    {
+                        "alignmentPeriod": "60s",
+                        "perSeriesAligner": "ALIGN_MEAN"
+                    }
+                ]
+            }
+        }
+    ],
+    "notificationChannels": [
+        "projects/sugukuru7/notificationChannels/8540317787210228267"
+    ],
+    "alertStrategy": {
+        "autoClose": "604800s"
+    },
+    "documentation": {
+        "content": "Cloud SQL のCPU使用率が80%を超えました。パフォーマンスを確認してください。",
+        "mimeType": "text/markdown"
+    }
+}
