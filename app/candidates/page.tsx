@@ -10,12 +10,17 @@ import {
     X,
     RefreshCw,
     Users,
-    AlertTriangle
+    AlertTriangle,
+    Plus,
+    Save
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 // API Base URL
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://sugukuru-api-1027796998462.asia-northeast1.run.app';
+
+// Default tenant ID (from database)
+const DEFAULT_TENANT_ID = '7b8c87d0-b418-4e22-b863-bea7971a94f6';
 
 // Person type from API
 interface Person {
@@ -61,6 +66,35 @@ const nationalityLabels: Record<string, string> = {
     other: 'その他',
 };
 
+const nationalityOptions = [
+    { value: 'indonesia', label: 'インドネシア' },
+    { value: 'vietnam', label: 'ベトナム' },
+    { value: 'philippines', label: 'フィリピン' },
+    { value: 'myanmar', label: 'ミャンマー' },
+    { value: 'china', label: '中国' },
+    { value: 'cambodia', label: 'カンボジア' },
+    { value: 'nepal', label: 'ネパール' },
+    { value: 'thailand', label: 'タイ' },
+];
+
+const statusOptions = [
+    { value: 'monitoring', label: '管理中' },
+    { value: 'applying', label: '申請中' },
+    { value: 'preparing', label: '準備中' },
+    { value: 'resigned', label: '退職済み' },
+    { value: 'lost', label: '失注' },
+    { value: 'hold', label: '保留' },
+];
+
+const visaOptions = [
+    { value: '特定技能1号', label: '特定技能1号' },
+    { value: '特定技能2号', label: '特定技能2号' },
+    { value: '技能実習1号', label: '技能実習1号' },
+    { value: '技能実習2号', label: '技能実習2号' },
+    { value: '技能実習3号', label: '技能実習3号' },
+    { value: '特定活動', label: '特定活動' },
+];
+
 const statusLabels: Record<string, { label: string; color: string }> = {
     monitoring: { label: '管理中', color: 'success' },
     applying: { label: '申請中', color: 'warning' },
@@ -94,6 +128,20 @@ export default function CandidatesPage() {
         statuses: [] as string[],
     });
     const [showFilters, setShowFilters] = useState(false);
+
+    // New person modal state
+    const [showNewModal, setShowNewModal] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [newPersonForm, setNewPersonForm] = useState({
+        full_name: '',
+        full_name_kana: '',
+        email: '',
+        phone: '',
+        nationality: 'indonesia',
+        current_status: 'monitoring',
+        current_visa_type: '',
+        visa_expiry_date: '',
+    });
 
     const fetchPeople = useCallback(async () => {
         setLoading(true);
@@ -171,6 +219,79 @@ export default function CandidatesPage() {
         setSearchQuery('');
     };
 
+    const resetNewPersonForm = () => {
+        setNewPersonForm({
+            full_name: '',
+            full_name_kana: '',
+            email: '',
+            phone: '',
+            nationality: 'indonesia',
+            current_status: 'monitoring',
+            current_visa_type: '',
+            visa_expiry_date: '',
+        });
+    };
+
+    const handleCreatePerson = async () => {
+        if (!newPersonForm.full_name.trim()) {
+            alert('氏名を入力してください');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const createData = {
+                tenant_id: DEFAULT_TENANT_ID,
+                names: {
+                    full_name: newPersonForm.full_name.trim(),
+                    full_name_kana: newPersonForm.full_name_kana.trim() || null,
+                },
+                demographics: {
+                    nationality: newPersonForm.nationality,
+                },
+                contact_info: {
+                    email: newPersonForm.email.trim() || null,
+                    phone: newPersonForm.phone.trim() || null,
+                },
+                current_status: newPersonForm.current_status,
+                nationality: newPersonForm.nationality,
+                current_visa_type: newPersonForm.current_visa_type || null,
+                visa_expiry_date: newPersonForm.visa_expiry_date
+                    ? new Date(newPersonForm.visa_expiry_date).toISOString()
+                    : null,
+            };
+
+            const response = await fetch(`${API_BASE}/api/v1/people/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(createData),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || `Create failed: ${response.status}`);
+            }
+
+            const newPerson = await response.json();
+            setShowNewModal(false);
+            resetNewPersonForm();
+
+            // Refresh the list
+            await fetchPeople();
+
+            // Optionally navigate to the new person's detail page
+            router.push(`/candidates/${newPerson.person_id}`);
+
+        } catch (err) {
+            console.error('Failed to create person:', err);
+            alert('登録に失敗しました: ' + (err instanceof Error ? err.message : 'Unknown error'));
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const activeFilterCount = filters.nationalities.length + filters.statuses.length;
 
     // Calculate days until visa expiry
@@ -209,14 +330,194 @@ export default function CandidatesPage() {
 
     return (
         <div className="space-y-6 animate-fadeIn">
+            {/* New Person Modal */}
+            {showNewModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+                            <h2 className="text-xl font-bold">新規人材登録</h2>
+                            <button
+                                onClick={() => { setShowNewModal(false); resetNewPersonForm(); }}
+                                className="p-2 hover:bg-gray-100 rounded-lg"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {/* Basic Info */}
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-semibold text-gray-500 uppercase">基本情報</h3>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            氏名 <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={newPersonForm.full_name}
+                                            onChange={(e) => setNewPersonForm({ ...newPersonForm, full_name: e.target.value })}
+                                            className="input w-full"
+                                            placeholder="例: NGUYEN VAN A"
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            氏名（カナ）
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={newPersonForm.full_name_kana}
+                                            onChange={(e) => setNewPersonForm({ ...newPersonForm, full_name_kana: e.target.value })}
+                                            className="input w-full"
+                                            placeholder="例: グエン ヴァン アー"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        国籍
+                                    </label>
+                                    <select
+                                        value={newPersonForm.nationality}
+                                        onChange={(e) => setNewPersonForm({ ...newPersonForm, nationality: e.target.value })}
+                                        className="input w-full"
+                                    >
+                                        {nationalityOptions.map(opt => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Contact Info */}
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-semibold text-gray-500 uppercase">連絡先</h3>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            メールアドレス
+                                        </label>
+                                        <input
+                                            type="email"
+                                            value={newPersonForm.email}
+                                            onChange={(e) => setNewPersonForm({ ...newPersonForm, email: e.target.value })}
+                                            className="input w-full"
+                                            placeholder="example@email.com"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            電話番号
+                                        </label>
+                                        <input
+                                            type="tel"
+                                            value={newPersonForm.phone}
+                                            onChange={(e) => setNewPersonForm({ ...newPersonForm, phone: e.target.value })}
+                                            className="input w-full"
+                                            placeholder="090-1234-5678"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Status */}
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-semibold text-gray-500 uppercase">ステータス</h3>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        現在のステータス
+                                    </label>
+                                    <select
+                                        value={newPersonForm.current_status}
+                                        onChange={(e) => setNewPersonForm({ ...newPersonForm, current_status: e.target.value })}
+                                        className="input w-full"
+                                    >
+                                        {statusOptions.map(opt => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Visa Info */}
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-semibold text-gray-500 uppercase">在留資格</h3>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            在留資格
+                                        </label>
+                                        <select
+                                            value={newPersonForm.current_visa_type}
+                                            onChange={(e) => setNewPersonForm({ ...newPersonForm, current_visa_type: e.target.value })}
+                                            className="input w-full"
+                                        >
+                                            <option value="">選択してください</option>
+                                            {visaOptions.map(opt => (
+                                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            在留期限
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={newPersonForm.visa_expiry_date}
+                                            onChange={(e) => setNewPersonForm({ ...newPersonForm, visa_expiry_date: e.target.value })}
+                                            className="input w-full"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="sticky bottom-0 bg-gray-50 border-t px-6 py-4 flex justify-end gap-3">
+                            <button
+                                onClick={() => { setShowNewModal(false); resetNewPersonForm(); }}
+                                className="btn btn-secondary"
+                                disabled={saving}
+                            >
+                                キャンセル
+                            </button>
+                            <button
+                                onClick={handleCreatePerson}
+                                className="btn btn-primary flex items-center gap-2"
+                                disabled={saving || !newPersonForm.full_name.trim()}
+                            >
+                                {saving ? (
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Save className="w-4 h-4" />
+                                )}
+                                {saving ? '登録中...' : '登録'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Page Header */}
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">人材管理</h1>
                     <p className="text-gray-500 mt-1">特定技能人材のデータベース（{people.length}名登録）</p>
                 </div>
-                <button className="btn btn-primary">
-                    + 新規人材登録
+                <button
+                    onClick={() => setShowNewModal(true)}
+                    className="btn btn-primary flex items-center gap-2"
+                >
+                    <Plus className="w-4 h-4" />
+                    新規人材登録
                 </button>
             </div>
 
@@ -351,10 +652,16 @@ export default function CandidatesPage() {
                         <Users className="w-8 h-8 text-gray-400" />
                     </div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">人材が見つかりません</h3>
-                    <p className="text-gray-500 mb-4">検索条件を変更してみてください</p>
-                    <button onClick={clearFilters} className="btn btn-secondary">
-                        フィルターをクリア
-                    </button>
+                    <p className="text-gray-500 mb-4">検索条件を変更するか、新規登録してください</p>
+                    <div className="flex gap-3 justify-center">
+                        <button onClick={clearFilters} className="btn btn-secondary">
+                            フィルターをクリア
+                        </button>
+                        <button onClick={() => setShowNewModal(true)} className="btn btn-primary flex items-center gap-2">
+                            <Plus className="w-4 h-4" />
+                            新規登録
+                        </button>
+                    </div>
                 </div>
             ) : (
                 <div className="table-container">
