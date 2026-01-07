@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Calendar,
     ChevronLeft,
@@ -10,9 +10,13 @@ import {
     AlertTriangle,
     Users,
     BarChart3,
-    RefreshCw
+    RefreshCw,
+    Plus
 } from 'lucide-react';
 import { clsx } from 'clsx';
+
+// API Base URL
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://sugukuru-api-1027796998462.asia-northeast1.run.app';
 
 interface WorkerSlot {
     personId: string;
@@ -20,9 +24,9 @@ interface WorkerSlot {
     status: 'confirmed' | 'tentative' | 'vacant';
 }
 
-interface ClientDay {
-    date: string;
-    dayOfWeek: string;
+interface ClientWeek {
+    weekNumber: number;
+    weekLabel: string;
     slots: WorkerSlot[];
     required: number;
 }
@@ -31,67 +35,49 @@ interface ClientRow {
     clientId: string;
     clientName: string;
     region: string;
-    days: ClientDay[];
+    weeks: ClientWeek[];
 }
 
 export default function DispatchBoardPage() {
-    const [weekStart, setWeekStart] = useState('2025-01-27');
+    const [currentMonth, setCurrentMonth] = useState(() => {
+        const now = new Date();
+        return `${now.getFullYear()}年${now.getMonth() + 1}月`;
+    });
     const [data, setData] = useState<ClientRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSimulating, setIsSimulating] = useState(false);
 
-    useEffect(() => {
-        // Fetch dispatch grid data
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                const response = await fetch(`http://localhost:8000/api/v1/dispatch/grid?week_start=${weekStart}`);
-                if (response.ok) {
-                    const apiData = await response.json();
-                    setData(apiData.clients || []);
+    const weekLabels = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'];
+
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        try {
+            // Try to fetch from API
+            const response = await fetch(`${API_BASE}/api/v1/dispatch/grid`);
+            if (response.ok) {
+                const apiData = await response.json();
+                if (apiData.clients && apiData.clients.length > 0) {
+                    setData(apiData.clients);
                 } else {
-                    // Mock data for development
-                    setData(mockData);
+                    // No data from API
+                    setData([]);
                 }
-            } catch (error) {
-                console.error('Failed to fetch dispatch data:', error);
-                setData(mockData);
-            } finally {
-                setLoading(false);
+            } else {
+                // API returned error - show empty state
+                setData([]);
             }
-        };
-        fetchData();
-    }, [weekStart]);
-
-    // Mock data
-    const mockData: ClientRow[] = [
-        {
-            clientId: '1',
-            clientName: '片平農産',
-            region: '鹿児島市',
-            days: [
-                { date: '2025-01-27', dayOfWeek: '月', slots: [{ personId: '1', name: 'GARCIA', status: 'confirmed' }], required: 2 },
-                { date: '2025-01-28', dayOfWeek: '火', slots: [], required: 2 },
-                { date: '2025-01-29', dayOfWeek: '水', slots: [{ personId: '2', name: 'NGUYEN', status: 'confirmed' }], required: 2 },
-                { date: '2025-01-30', dayOfWeek: '木', slots: [{ personId: '1', name: 'GARCIA', status: 'confirmed' }], required: 2 },
-                { date: '2025-01-31', dayOfWeek: '金', slots: [{ personId: '1', name: 'GARCIA', status: 'confirmed' }], required: 2 },
-            ]
-        },
-        {
-            clientId: '2',
-            clientName: '南九州ファーム',
-            region: '指宿市',
-            days: [
-                { date: '2025-01-27', dayOfWeek: '月', slots: [{ personId: '3', name: 'TRAN', status: 'confirmed' }, { personId: '4', name: 'PHAM', status: 'tentative' }], required: 3 },
-                { date: '2025-01-28', dayOfWeek: '火', slots: [{ personId: '3', name: 'TRAN', status: 'confirmed' }], required: 3 },
-                { date: '2025-01-29', dayOfWeek: '水', slots: [{ personId: '3', name: 'TRAN', status: 'confirmed' }, { personId: '4', name: 'PHAM', status: 'confirmed' }], required: 3 },
-                { date: '2025-01-30', dayOfWeek: '木', slots: [{ personId: '3', name: 'TRAN', status: 'confirmed' }], required: 3 },
-                { date: '2025-01-31', dayOfWeek: '金', slots: [{ personId: '3', name: 'TRAN', status: 'confirmed' }, { personId: '4', name: 'PHAM', status: 'confirmed' }], required: 3 },
-            ]
+        } catch (error) {
+            console.error('Failed to fetch dispatch data:', error);
+            // No mock data - show empty state
+            setData([]);
+        } finally {
+            setLoading(false);
         }
-    ];
+    }, []);
 
-    const weekDays = ['月', '火', '水', '木', '金'];
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -105,12 +91,35 @@ export default function DispatchBoardPage() {
         let filled = 0;
         let total = 0;
         data.forEach(client => {
-            client.days.forEach(day => {
-                total += day.required;
-                filled += day.slots.length;
+            client.weeks?.forEach(week => {
+                total += week.required || 0;
+                filled += week.slots?.length || 0;
             });
         });
         return total > 0 ? ((filled / total) * 100).toFixed(1) : '0';
+    };
+
+    const calculateTotalWorkers = () => {
+        const workers = new Set<string>();
+        data.forEach(client => {
+            client.weeks?.forEach(week => {
+                week.slots?.forEach(slot => {
+                    if (slot.personId) workers.add(slot.personId);
+                });
+            });
+        });
+        return workers.size;
+    };
+
+    const calculateVacantSlots = () => {
+        let vacant = 0;
+        data.forEach(client => {
+            client.weeks?.forEach(week => {
+                const diff = (week.required || 0) - (week.slots?.length || 0);
+                if (diff > 0) vacant += diff;
+            });
+        });
+        return vacant;
     };
 
     return (
@@ -143,21 +152,29 @@ export default function DispatchBoardPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">配置管理</h1>
-                    <p className="text-gray-500 mt-1">週次の人員配置とシミュレーション</p>
+                    <p className="text-gray-500 mt-1">月次の人員配置とシミュレーション</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    {/* Week Navigator */}
+                    {/* Month Navigator */}
                     <div className="flex items-center bg-white border border-gray-200 rounded-lg">
                         <button className="p-2 hover:bg-gray-50 border-r border-gray-200">
                             <ChevronLeft className="w-5 h-5 text-gray-600" />
                         </button>
                         <div className="px-4 py-2 font-medium text-gray-900">
-                            2025年1月 第4週
+                            {currentMonth}
                         </div>
                         <button className="p-2 hover:bg-gray-50 border-l border-gray-200">
                             <ChevronRight className="w-5 h-5 text-gray-600" />
                         </button>
                     </div>
+
+                    <button
+                        onClick={fetchData}
+                        className="btn btn-secondary"
+                        disabled={loading}
+                    >
+                        <RefreshCw className={clsx("w-4 h-4", loading && "animate-spin")} />
+                    </button>
 
                     {!isSimulating && (
                         <button
@@ -187,7 +204,7 @@ export default function DispatchBoardPage() {
                         <Users className="w-6 h-6 text-green-600" />
                     </div>
                     <div>
-                        <div className="text-2xl font-bold text-gray-900">48<span className="text-base text-gray-400">/52</span></div>
+                        <div className="text-2xl font-bold text-gray-900">{calculateTotalWorkers()}</div>
                         <div className="text-sm text-gray-500">稼働人数</div>
                     </div>
                 </div>
@@ -196,7 +213,7 @@ export default function DispatchBoardPage() {
                         <AlertTriangle className="w-6 h-6 text-amber-600" />
                     </div>
                     <div>
-                        <div className="text-2xl font-bold text-gray-900">4</div>
+                        <div className="text-2xl font-bold text-gray-900">{calculateVacantSlots()}</div>
                         <div className="text-sm text-gray-500">未配置スロット</div>
                     </div>
                 </div>
@@ -205,7 +222,22 @@ export default function DispatchBoardPage() {
             {/* Dispatch Grid */}
             {loading ? (
                 <div className="flex items-center justify-center py-20">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+                    <div className="text-center">
+                        <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-4" />
+                        <p className="text-gray-500">データを読み込み中...</p>
+                    </div>
+                </div>
+            ) : data.length === 0 ? (
+                <div className="card p-12 text-center">
+                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Calendar className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">配置データがありません</h3>
+                    <p className="text-gray-500 mb-4">派遣先と人材の配置を登録してください</p>
+                    <button className="btn btn-primary flex items-center gap-2 mx-auto">
+                        <Plus className="w-4 h-4" />
+                        新規配置を登録
+                    </button>
                 </div>
             ) : (
                 <div className="card overflow-hidden">
@@ -216,9 +248,9 @@ export default function DispatchBoardPage() {
                                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-48">
                                         派遣先
                                     </th>
-                                    {weekDays.map((day, idx) => (
+                                    {weekLabels.map((week, idx) => (
                                         <th key={idx} className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                            {day}
+                                            {week}
                                         </th>
                                     ))}
                                 </tr>
@@ -230,11 +262,11 @@ export default function DispatchBoardPage() {
                                             <div className="font-medium text-gray-900">{client.clientName}</div>
                                             <div className="text-xs text-gray-500">{client.region}</div>
                                         </td>
-                                        {client.days.map((day, idx) => (
+                                        {(client.weeks || []).slice(0, 5).map((week, idx) => (
                                             <td key={idx} className="px-2 py-3 text-center">
                                                 <div className="min-h-[60px] flex flex-col gap-1 items-center justify-center">
-                                                    {day.slots.length > 0 ? (
-                                                        day.slots.map((slot, si) => (
+                                                    {week.slots && week.slots.length > 0 ? (
+                                                        week.slots.map((slot, si) => (
                                                             <span
                                                                 key={si}
                                                                 className={clsx(
@@ -248,11 +280,19 @@ export default function DispatchBoardPage() {
                                                     ) : (
                                                         <span className="text-gray-300 text-xs">空き</span>
                                                     )}
-                                                    {day.slots.length < day.required && (
+                                                    {week.slots && week.required && week.slots.length < week.required && (
                                                         <span className="text-xs text-amber-600">
-                                                            +{day.required - day.slots.length}必要
+                                                            +{week.required - week.slots.length}必要
                                                         </span>
                                                     )}
+                                                </div>
+                                            </td>
+                                        ))}
+                                        {/* Fill remaining weeks if less than 5 */}
+                                        {Array.from({ length: Math.max(0, 5 - (client.weeks?.length || 0)) }).map((_, idx) => (
+                                            <td key={`empty-${idx}`} className="px-2 py-3 text-center">
+                                                <div className="min-h-[60px] flex items-center justify-center">
+                                                    <span className="text-gray-300 text-xs">-</span>
                                                 </div>
                                             </td>
                                         ))}
@@ -264,16 +304,13 @@ export default function DispatchBoardPage() {
                 </div>
             )}
 
-            {/* Smart Advice */}
+            {/* Info Card */}
             <div className="card bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
                 <div className="p-5">
-                    <h3 className="font-semibold text-gray-900 mb-2">💡 スマート配置アドバイス</h3>
-                    <p className="text-sm text-gray-600 mb-3">
-                        片平農産の火曜日に1名欠員があります。鹿児島市在住の GARCIA さんを配置することをお勧めします。
+                    <h3 className="font-semibold text-gray-900 mb-2">📅 週次ビュー説明</h3>
+                    <p className="text-sm text-gray-600">
+                        Week 1〜Week 5は月の各週を表します。派遣先ごとの人員配置状況を確認し、シミュレーションモードで人員調整を行うことができます。
                     </p>
-                    <button className="btn btn-primary text-sm">
-                        提案を採用する
-                    </button>
                 </div>
             </div>
         </div>
