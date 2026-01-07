@@ -4,8 +4,6 @@ import { useParams, useRouter } from 'next/navigation';
 import {
     ChevronLeft,
     MapPin,
-    Briefcase,
-    Calendar,
     Phone,
     Mail,
     Clock,
@@ -13,8 +11,10 @@ import {
     RefreshCw,
     AlertTriangle,
     User,
-    Building,
-    CreditCard
+    CreditCard,
+    X,
+    Save,
+    Pencil
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -65,6 +65,35 @@ const nationalityLabels: Record<string, string> = {
     フィリピン: 'フィリピン',
 };
 
+const nationalityOptions = [
+    { value: 'indonesia', label: 'インドネシア' },
+    { value: 'vietnam', label: 'ベトナム' },
+    { value: 'philippines', label: 'フィリピン' },
+    { value: 'myanmar', label: 'ミャンマー' },
+    { value: 'china', label: '中国' },
+    { value: 'cambodia', label: 'カンボジア' },
+    { value: 'nepal', label: 'ネパール' },
+    { value: 'thailand', label: 'タイ' },
+];
+
+const statusOptions = [
+    { value: 'monitoring', label: '管理中' },
+    { value: 'applying', label: '申請中' },
+    { value: 'preparing', label: '準備中' },
+    { value: 'resigned', label: '退職済み' },
+    { value: 'lost', label: '失注' },
+    { value: 'hold', label: '保留' },
+];
+
+const visaOptions = [
+    { value: '特定技能1号', label: '特定技能1号' },
+    { value: '特定技能2号', label: '特定技能2号' },
+    { value: '技能実習1号', label: '技能実習1号' },
+    { value: '技能実習2号', label: '技能実習2号' },
+    { value: '技能実習3号', label: '技能実習3号' },
+    { value: '特定活動', label: '特定活動' },
+];
+
 const statusLabels: Record<string, { label: string; color: string }> = {
     monitoring: { label: '管理中', color: 'success' },
     applying: { label: '申請中', color: 'warning' },
@@ -80,6 +109,22 @@ export default function CandidateDetailPage() {
     const [person, setPerson] = useState<Person | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
+
+    // Edit form state
+    const [editForm, setEditForm] = useState({
+        full_name: '',
+        full_name_kana: '',
+        email: '',
+        phone: '',
+        nationality: '',
+        current_status: '',
+        current_status_notes: '',
+        current_visa_type: '',
+        visa_expiry_date: '',
+    });
 
     const fetchPerson = async () => {
         if (!params?.personId) return;
@@ -88,19 +133,29 @@ export default function CandidateDetailPage() {
         setError(null);
 
         try {
-            // First try to get from people list and find by ID
-            const response = await fetch(`${API_BASE}/api/v1/people/`);
+            const response = await fetch(`${API_BASE}/api/v1/people/${params.personId}`);
             if (!response.ok) {
+                if (response.status === 404) {
+                    setError('人材が見つかりませんでした');
+                    return;
+                }
                 throw new Error(`API Error: ${response.status}`);
             }
-            const people: Person[] = await response.json();
-            const found = people.find(p => p.person_id === params.personId);
+            const data: Person = await response.json();
+            setPerson(data);
 
-            if (found) {
-                setPerson(found);
-            } else {
-                setError('人材が見つかりませんでした');
-            }
+            // Initialize edit form
+            setEditForm({
+                full_name: data.names.full_name || '',
+                full_name_kana: data.names.full_name_kana || '',
+                email: data.contact_info?.email || '',
+                phone: data.contact_info?.phone || '',
+                nationality: data.demographics?.nationality || data.nationality || '',
+                current_status: data.current_status || 'monitoring',
+                current_status_notes: data.current_status_notes || '',
+                current_visa_type: data.current_visa_type || '',
+                visa_expiry_date: data.visa_expiry_date ? data.visa_expiry_date.split('T')[0] : '',
+            });
         } catch (err) {
             console.error('Failed to fetch person:', err);
             setError(err instanceof Error ? err.message : 'データの取得に失敗しました');
@@ -112,6 +167,63 @@ export default function CandidateDetailPage() {
     useEffect(() => {
         fetchPerson();
     }, [params?.personId]);
+
+    const handleSave = async () => {
+        if (!person) return;
+
+        setSaving(true);
+        setSaveSuccess(false);
+
+        try {
+            const updateData = {
+                names: {
+                    ...person.names,
+                    full_name: editForm.full_name,
+                    full_name_kana: editForm.full_name_kana,
+                },
+                contact_info: {
+                    ...person.contact_info,
+                    email: editForm.email,
+                    phone: editForm.phone,
+                },
+                demographics: {
+                    ...person.demographics,
+                    nationality: editForm.nationality,
+                },
+                current_status: editForm.current_status,
+                current_status_notes: editForm.current_status_notes,
+                nationality: editForm.nationality,
+                current_visa_type: editForm.current_visa_type,
+                visa_expiry_date: editForm.visa_expiry_date ? new Date(editForm.visa_expiry_date).toISOString() : null,
+            };
+
+            const response = await fetch(`${API_BASE}/api/v1/people/${person.person_id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(updateData),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Update failed: ${response.status}`);
+            }
+
+            const updatedPerson = await response.json();
+            setPerson(updatedPerson);
+            setIsEditing(false);
+            setSaveSuccess(true);
+
+            // Clear success message after 3 seconds
+            setTimeout(() => setSaveSuccess(false), 3000);
+
+        } catch (err) {
+            console.error('Failed to save:', err);
+            alert('保存に失敗しました: ' + (err instanceof Error ? err.message : 'Unknown error'));
+        } finally {
+            setSaving(false);
+        }
+    };
 
     // Calculate age from date of birth
     const calculateAge = (dob?: string): number | null => {
@@ -188,19 +300,226 @@ export default function CandidateDetailPage() {
 
     return (
         <div className="space-y-6 animate-fadeIn">
-            {/* Back Navigation */}
-            <div className="flex items-center gap-4">
-                <button
-                    onClick={() => router.back()}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition"
-                >
-                    <ChevronLeft className="w-5 h-5 text-gray-600" />
-                </button>
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">人材詳細</h1>
-                    <p className="text-gray-500 text-sm">プロファイル情報</p>
+            {/* Success Message */}
+            {saveSuccess && (
+                <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50 animate-fadeIn flex items-center gap-2">
+                    <Save className="w-5 h-5" />
+                    保存しました
                 </div>
+            )}
+
+            {/* Back Navigation */}
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => router.back()}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition"
+                    >
+                        <ChevronLeft className="w-5 h-5 text-gray-600" />
+                    </button>
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900">人材詳細</h1>
+                        <p className="text-gray-500 text-sm">プロファイル情報</p>
+                    </div>
+                </div>
+                {!isEditing && (
+                    <button
+                        onClick={() => setIsEditing(true)}
+                        className="btn btn-primary flex items-center gap-2"
+                    >
+                        <Pencil className="w-4 h-4" />
+                        編集
+                    </button>
+                )}
             </div>
+
+            {/* Edit Modal */}
+            {isEditing && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+                            <h2 className="text-xl font-bold">人材情報を編集</h2>
+                            <button
+                                onClick={() => setIsEditing(false)}
+                                className="p-2 hover:bg-gray-100 rounded-lg"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {/* Basic Info */}
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-semibold text-gray-500 uppercase">基本情報</h3>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            氏名 *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={editForm.full_name}
+                                            onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                                            className="input w-full"
+                                            placeholder="例: NGUYEN VAN A"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            氏名（カナ）
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={editForm.full_name_kana}
+                                            onChange={(e) => setEditForm({ ...editForm, full_name_kana: e.target.value })}
+                                            className="input w-full"
+                                            placeholder="例: グエン ヴァン アー"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        国籍
+                                    </label>
+                                    <select
+                                        value={editForm.nationality}
+                                        onChange={(e) => setEditForm({ ...editForm, nationality: e.target.value })}
+                                        className="input w-full"
+                                    >
+                                        <option value="">選択してください</option>
+                                        {nationalityOptions.map(opt => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Contact Info */}
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-semibold text-gray-500 uppercase">連絡先</h3>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            メールアドレス
+                                        </label>
+                                        <input
+                                            type="email"
+                                            value={editForm.email}
+                                            onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                                            className="input w-full"
+                                            placeholder="example@email.com"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            電話番号
+                                        </label>
+                                        <input
+                                            type="tel"
+                                            value={editForm.phone}
+                                            onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                                            className="input w-full"
+                                            placeholder="090-1234-5678"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Status */}
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-semibold text-gray-500 uppercase">ステータス</h3>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        現在のステータス
+                                    </label>
+                                    <select
+                                        value={editForm.current_status}
+                                        onChange={(e) => setEditForm({ ...editForm, current_status: e.target.value })}
+                                        className="input w-full"
+                                    >
+                                        {statusOptions.map(opt => (
+                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        ステータスメモ
+                                    </label>
+                                    <textarea
+                                        value={editForm.current_status_notes}
+                                        onChange={(e) => setEditForm({ ...editForm, current_status_notes: e.target.value })}
+                                        className="input w-full min-h-[100px]"
+                                        placeholder="備考・メモを入力..."
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Visa Info */}
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-semibold text-gray-500 uppercase">在留資格</h3>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            在留資格
+                                        </label>
+                                        <select
+                                            value={editForm.current_visa_type}
+                                            onChange={(e) => setEditForm({ ...editForm, current_visa_type: e.target.value })}
+                                            className="input w-full"
+                                        >
+                                            <option value="">選択してください</option>
+                                            {visaOptions.map(opt => (
+                                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            在留期限
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={editForm.visa_expiry_date}
+                                            onChange={(e) => setEditForm({ ...editForm, visa_expiry_date: e.target.value })}
+                                            className="input w-full"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="sticky bottom-0 bg-gray-50 border-t px-6 py-4 flex justify-end gap-3">
+                            <button
+                                onClick={() => setIsEditing(false)}
+                                className="btn btn-secondary"
+                                disabled={saving}
+                            >
+                                キャンセル
+                            </button>
+                            <button
+                                onClick={handleSave}
+                                className="btn btn-primary flex items-center gap-2"
+                                disabled={saving}
+                            >
+                                {saving ? (
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Save className="w-4 h-4" />
+                                )}
+                                {saving ? '保存中...' : '保存'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Profile Header Card */}
             <div className="card p-6">
@@ -399,12 +718,16 @@ export default function CandidateDetailPage() {
             <div className="flex gap-4">
                 <button
                     onClick={() => router.back()}
-                    className="btn btn-secondary"
+                    className="btn btn-secondary flex items-center gap-2"
                 >
                     <ChevronLeft className="w-4 h-4" />
                     一覧に戻る
                 </button>
-                <button className="btn btn-primary">
+                <button
+                    onClick={() => setIsEditing(true)}
+                    className="btn btn-primary flex items-center gap-2"
+                >
+                    <Pencil className="w-4 h-4" />
                     編集
                 </button>
             </div>
