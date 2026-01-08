@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from src.api.config import settings
 
 def create_app() -> FastAPI:
@@ -11,7 +12,11 @@ def create_app() -> FastAPI:
         openapi_url=f"{settings.API_V1_STR}/openapi.json",
         docs_url="/docs",
         redoc_url="/redoc",
+        redirect_slashes=False,  # Prevent http:// redirects for trailing slashes
     )
+    
+    # Trust proxy headers (X-Forwarded-Proto) for Cloud Run
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
     # CORS 設定
     if settings.BACKEND_CORS_ORIGINS:

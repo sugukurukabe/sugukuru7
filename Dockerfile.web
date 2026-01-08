@@ -3,6 +3,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Set build-time environment variables
+ARG NEXT_PUBLIC_API_URL=https://sugukuru-api-1027796998462.asia-northeast1.run.app
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Install dependencies
 COPY package.json package-lock.json* ./
 RUN npm ci
@@ -17,6 +21,9 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV production
+# Pass through the API URL for runtime (in case of SSR)
+ARG NEXT_PUBLIC_API_URL=https://sugukuru-api-1027796998462.asia-northeast1.run.app
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 # Standalone mode output (recommended for Next.js 14)
 COPY --from=builder /app/public ./public

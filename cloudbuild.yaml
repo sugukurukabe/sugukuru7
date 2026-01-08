@@ -3,6 +3,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
+      - '--no-cache'
       - '-t'
       - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/sugukuru/sugukuru-api:latest'
       - '-f'
@@ -13,10 +14,13 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
+      - '--no-cache'
       - '-t'
       - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/sugukuru/sugukuru-web:latest'
       - '-f'
       - 'Dockerfile.web'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_API_URL=https://sugukuru-api-1027796998462.asia-northeast1.run.app'
       - '.'
 
   # Push API image
