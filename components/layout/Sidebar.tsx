@@ -11,15 +11,18 @@ import {
     ShieldCheck,
     BarChart3,
     Settings,
-    HelpCircle
+    HelpCircle,
+    Building2,
+    PieChart
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 const navigation = [
     { name: 'ダッシュボード', href: '/', icon: LayoutDashboard },
-    { name: '人材管理', href: '/candidates', icon: Users },
-    { name: '配置管理', href: '/dispatch', icon: Calendar },
+    { name: '請求管理', href: '/billing', icon: PieChart },
     { name: '商談管理', href: '/deals', icon: Briefcase },
+    { name: '人材管理', href: '/candidates', icon: Users },
+    { name: '顧客管理', href: '/clients', icon: Building2 },
     { name: '経営KPI', href: '/kpi', icon: BarChart3 },
     { name: '入管届出', href: '/notices', icon: ShieldCheck },
     { name: 'ドキュメント', href: '/documents', icon: FileText },

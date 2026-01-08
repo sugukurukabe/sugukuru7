@@ -54,14 +54,15 @@ interface Person {
 }
 
 const noticeTypes = [
-    { value: 'zuitoji_dispatch_change', label: '随時届出（派遣先変更）', code: '様式第3号-4' },
-    { value: 'zuitoji_termination', label: '随時届出（契約終了）', code: '様式第3号-4' },
-    { value: 'zuitoji_new_contract', label: '随時届出（新規契約）', code: '様式第3号-4' },
-    { value: 'quarterly_report', label: '定期届出（四半期）', code: '様式第3号-6' },
-    { value: 'annual_report', label: '定期届出（年次）', code: '様式第3号-6' },
-    { value: 'address_change', label: '届出（住所変更）', code: '様式第3号-4' },
-    { value: 'employment_start', label: '届出（雇用開始）', code: '様式第3号-3' },
-    { value: 'employment_end', label: '届出（雇用終了）', code: '様式第3号-4' },
+    { value: 'zuitoji_dispatch_change', label: '随時届出（派遣先変更）', code: '様式第3-1-1号' },
+    { value: 'zuitoji_termination', label: '随時届出（契約終了）', code: '様式第3-1-2号' },
+    { value: 'zuitoji_new_contract', label: '随時届出（新規契約）', code: '様式第3-1-2号' },
+    { value: 'zuitoji_difficulty', label: '随時届出（受入れ困難）', code: '様式第3-4号' },
+    { value: 'quarterly_report', label: '定期届出（四半期・支援実施）', code: '様式第3-6号' },
+    { value: 'quarterly_activity', label: '定期届出（四半期・活動状況）', code: '様式第3-5号' },
+    { value: 'address_change', label: '届出（住所変更）', code: '様式第3-1-1号' },
+    { value: 'employment_start', label: '届出（雇用開始）', code: '様式第3-1-2号' },
+    { value: 'employment_end', label: '届出（雇用終了）', code: '様式第3-1-2号' },
 ];
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -235,25 +236,44 @@ export default function NoticesPage() {
         const industryField = '農業'; // 特定産業分野
         const businessCategory = '耕種農業全般'; // 業務区分
 
-        // ===== Sheet 1: 参考様式第3-1-1号 特定技能雇用契約の変更に係る届出書 =====
-        const formData: (string | number)[][] = [
+        // Determine form title and number
+        let formNumberStr = '参考様式第3-1-1号';
+        let formTitle = '特定技能雇用契約の変更に係る届出書';
+
+        if (noticeTypeInfo?.code) {
+            formNumberStr = '参考' + noticeTypeInfo.code;
+            if (noticeTypeInfo.code.includes('3-1-2')) {
+                formTitle = '特定技能雇用契約に係る届出書';
+            } else if (noticeTypeInfo.code.includes('3-4')) {
+                formTitle = '受入れ困難に係る届出書';
+            } else if (noticeTypeInfo.code.includes('3-6')) {
+                formTitle = '支援実施状況に係る届出書';
+            } else if (noticeTypeInfo.code.includes('3-5')) {
+                formTitle = '活動状況に係る届出書';
+            }
+        }
+
+        // ===== Sheet 1: Form Data =====
+        let formData: (string | number)[][] = [];
+        let merges: any[] = [];
+        const commonHeaderRows = [
             // Row 1: Header
-            ['参考様式第3-1-1号', '', '', '', '', '', '', '', '', '', '', '', ''],
+            [formNumberStr, '', '', '', '', '', '', '', '', '', '', '', ''],
             // Row 2: Empty
             ['', '', '', '', '', '', '', '', '', '', '', '', ''],
             // Row 3: Title
-            ['', '', '', '特定技能雇用契約の変更に係る届出書', '', '', '', '', '', '', '', '', ''],
+            ['', '', '', formTitle, '', '', '', '', '', '', '', '', ''],
             // Row 4: Empty
             ['', '', '', '', '', '', '', '', '', '', '', '', ''],
             // Row 5: 宛先
             ['', '出入国在留管理庁長官', '', '殿', '', '', '', '', '', '', '', '', ''],
             // Row 6: Empty
             ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 7: 法的根拠
-            ['出入国管理及び難民認定法第19条の18第1項第1号の規定により、次のとおり届け出ます。', '', '', '', '', '', '', '', '', '', '', '', ''],
+            // Row 7: 法的根拠 (will be set based on type)
+            ['', '', '', '', '', '', '', '', '', '', '', '', ''],
             // Row 8: Empty
             ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 9: Section 1
+            // Row 9: Section 1 (Common)
             ['①', '届出の対象者', '', '', '', '', '', '', '', '', '', '', ''],
             // Row 10: Name header
             ['', '氏名(ローマ字)', '', '', '', '', '', '', '', '', '性別', '男 ・ 女', ''],
@@ -277,81 +297,108 @@ export default function NoticesPage() {
             ['', industryField, '', '', '', '', '', '', '', businessCategory, '', '', ''],
             // Row 20: Empty
             ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 21: Section 2
-            ['②', '特定技能雇用契約の変更内容', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 22: Change date header
-            ['', 'a', '変更年月日', '', '', '', eventYear, '年', eventMonth, '月', eventDay, '日', ''],
-            // Row 23: Empty
-            ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 24: Change items header
-            ['', 'b', '変更事項', '', '', '', '', '', '', '', '', '', ''],
-            // Row 25: Empty
-            ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 26: Checkbox instruction
-            ['', '', '①変更した内容に該当する事項を以下の中から選択してください（複数選択可）。', '', '', '', '', '', '', '', '', '', ''],
-            // Row 27: Empty
-            ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 28: Checkboxes row 1
-            ['', '', '□', 'Ⅰ.雇用契約期間', '', '□', 'Ⅳ.労働時間等', '', '□', 'Ⅶ.賃金', '', '', ''],
-            // Row 29: Checkboxes row 2
-            ['', '', '□', 'Ⅱ.就業の場所', '', '□', 'Ⅴ.休日', '', '□', 'Ⅷ.退職に関する事項', '', '', ''],
-            // Row 30: Checkboxes row 3
-            ['', '', '□', 'Ⅲ.従事すべき業務の内容', '', '□', 'Ⅵ.休暇', '', '□', 'Ⅸ.その他（社会保険・労働保険の加入状況、健康診断、帰国担保措置）', '', '', ''],
-            // Row 31: Empty
-            ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 32: Attachment instruction
-            ['', '', '②変更後の契約内容が記載された雇用条件書（参考様式第1-6号、別紙を含む。）を添付してください。', '', '', '', '', '', '', '', '', '', ''],
-            // Row 33: Note 1
-            ['', '', '（雇用条件書は、変更があった部分だけを記載又は既にある雇用条件書に朱書き修正した形で提出してください。）', '', '', '', '', '', '', '', '', '', ''],
-            // Row 34: Note 2
-            ['', '', '（変更後の契約内容を記した雇用条件書は、対象となる特定技能外国人本人が十分に理解できる言語で翻訳し、説明し、', '', '', '', '', '', '', '', '', '', ''],
-            // Row 35: Note 3
-            ['', '', '当該外国人が十分に理解したことを確認した上で、署名を得る必要があります。）', '', '', '', '', '', '', '', '', '', ''],
-            // Row 36: Empty
-            ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 37: Section 3
+        ];
+
+        // Fill Legal Base (Row 7)
+        let legalBaseText = '出入国管理及び難民認定法第19条の18第1項第1号の規定により、次のとおり届け出ます。'; // Default for 3-1-1
+        if (noticeTypeInfo?.code?.includes('3-4')) {
+            legalBaseText = '出入国管理及び難民認定法第19条の18第2項第1号の規定により、次のとおり届け出ます。';
+        }
+
+        // Apply common rows
+        formData = [...commonHeaderRows];
+        formData[6][0] = legalBaseText;
+
+
+        // Specific Content Based on Type
+        if (noticeTypeInfo?.code?.includes('3-1-1')) {
+            // === Form 3-1-1 (Change) ===
+            const section2 = [
+                ['②', '特定技能雇用契約の変更内容', '', '', '', '', '', '', '', '', '', '', ''],
+                ['', 'a', '変更年月日', '', '', '', eventYear, '年', eventMonth, '月', eventDay, '日', ''],
+                ['', '', '', '', '', '', '', '', '', '', '', '', ''],
+                ['', 'b', '変更事項', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', '', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', '①変更した内容に該当する事項を以下の中から選択してください（複数選択可）。', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', '', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', '□', 'Ⅰ.雇用契約期間', '', '□', 'Ⅳ.労働時間等', '', '□', 'Ⅶ.賃金', '', '', ''],
+                ['', '', '□', 'Ⅱ.就業の場所', '', '□', 'Ⅴ.休日', '', '□', 'Ⅷ.退職に関する事項', '', '', ''],
+                ['', '', '□', 'Ⅲ.従事すべき業務の内容', '', '□', 'Ⅵ.休暇', '', '□', 'Ⅸ.その他（社会保険・労働保険の加入状況、健康診断、帰国担保措置）', '', '', ''],
+                ['', '', '', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', '②変更後の契約内容が記載された雇用条件書（参考様式第1-6号、別紙を含む。）を添付してください。', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', '（雇用条件書は、変更があった部分だけを記載又は既にある雇用条件書に朱書き修正した形で提出してください。）', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', '（変更後の契約内容を記した雇用条件書は、対象となる特定技能外国人本人が十分に理解できる言語で翻訳し、説明し、', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', '当該外国人が十分に理解したことを確認した上で、署名を得る必要があります。）', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', '', '', '', '', '', '', '', '', '', '', ''],
+            ];
+            formData = [...formData, ...section2];
+
+        } else if (noticeTypeInfo?.code?.includes('3-1-2')) {
+            // === Form 3-1-2 (Termination/New) ===
+            const isTermination = notice.noticeType === 'zuitoji_termination';
+
+            const section2 = [
+                ['②', '特定技能雇用契約の内容', '', '', '', '', '', '', '', '', '', '', ''],
+                ['', 'a', '契約の区分', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', isTermination ? '■' : '□', '契約の終了', '', isTermination ? '□' : '■', '新たな契約の締結', '', '', '', '', '', ''],
+                ['', '', '', '', '', '', '', '', '', '', '', '', ''],
+                ['', 'b', isTermination ? '契約終了年月日' : '契約締結年月日', '', '', '', eventYear, '年', eventMonth, '月', eventDay, '日', ''],
+                ['', '', '', '', '', '', '', '', '', '', '', '', ''],
+                ['', 'c', isTermination ? '契約終了の理由' : '契約期間', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', isTermination ? '(1) 自己都合退職' : '自', '', '', '', '', isTermination ? '' : (eventYear + '年' + eventMonth + '月' + eventDay + '日'), '', '', '', '', '', ''],
+                ['', '', isTermination ? '(2) 解雇' : '至', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', isTermination ? '(3) その他' : '', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', '', '', '', '', '', '', '', '', '', '', ''],
+            ];
+            formData = [...formData, ...section2];
+
+        } else if (noticeTypeInfo?.code?.includes('3-4')) {
+            // === Form 3-4 (Difficulty) ===
+            const section2 = [
+                ['②', '受入れ困難の状況', '', '', '', '', '', '', '', '', '', '', ''],
+                ['', 'a', '発生年月日', '', '', '', eventYear, '年', eventMonth, '月', eventDay, '日', ''],
+                ['', '', '', '', '', '', '', '', '', '', '', '', ''],
+                ['', 'b', '受入れ困難となった事由', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', '□', '(1) 特定技能所属機関の経営上の都合（解雇、勧奨退職等）', '', '', '', '', '', '', '', '', ''],
+                ['', '', '□', '(2) 特定技能外国人の責めに帰すべき事由（懲戒解雇等）', '', '', '', '', '', '', '', '', ''],
+                ['', '', '□', '(3) 特定技能外国人の自己都合（任意退職）', '', '', '', '', '', '', '', '', ''],
+                ['', '', '□', '(4) 特定技能外国人の行方不明', '', '', '', '', '', '', '', '', ''],
+                ['', '', '□', '(5) 特定技能外国人の死亡', '', '', '', '', '', '', '', '', ''],
+                ['', '', '', '', '', '', '', '', '', '', '', '', ''],
+                ['', 'c', '講じた措置（※該当するもの全てチェック）', '', '', '', '', '', '', '', '', '', ''],
+                ['', '', '□', '(1) 公共職業安定所等への相談', '', '', '', '', '', '', '', '', ''],
+                ['', '', '□', '(2) 他の特定技能所属機関等への再就職の斡旋', '', '', '', '', '', '', '', '', ''],
+                ['', '', '□', '(3) 任意退職/死亡/行方不明のため措置なし', '', '', '', '', '', '', '', '', ''],
+                ['', '', '', '', '', '', '', '', '', '', '', '', ''],
+            ];
+            formData = [...formData, ...section2];
+        }
+
+        // Section 3: Agency (Common)
+        const section3 = [
             ['③', '届出機関', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 38: Empty
             ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 39: Corporate number
             ['', '法人番号（13桁）', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 40: Empty
             ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 41: Organization name
             ['', '機関の氏名又は名称', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 42: Org name value
             ['', '株式会社スグクル', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 43: Empty
             ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 44: Address header
             ['', '機関の住所', '〒', '', '-', '', '', '', '', '', '', '', ''],
-            // Row 45: Sub label
             ['', '（本店又は主たる事務所）', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 46: Address value
             ['', '鹿児島県鹿児島市〇〇町1-2-3', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 47: Empty
             ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 48: Contact person
             ['', '担当者', '', '', '', '', '電話番号', '', '', '', '', '', '※'],
-            // Row 49: Empty
             ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 50: Declaration
             ['以上の記載内容は事実と相違ありません。', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 51: Empty
             ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 52: Signature
             ['本届出書作成者の署名／作成年月日', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 53: Date
             ['', '', '', '', '', '', '', '', '', todayYear, '年', todayMonth, '月', todayDay, '日'],
-            // Row 54: Empty
             ['', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 55: Note
             ['注意', '届出書作成後届出までに記載内容に変更が生じた場合、特定技能所属機関職員（又は委任を受けた作成者）が変更箇所を訂正し署名すること。', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 56: Note reference
             ['（注）本書中、※のついた連絡先については、届出内容の確認のため、連絡させていただく場合があります。', '', '', '', '', '', '', '', '', '', '', '', ''],
-            // Row 57: Reference
             ['（記載要領）', '', '', '', '', '', '', '', '', '', '', '', ''],
         ];
+        formData = [...formData, ...section3];
 
         const ws1 = XLSX.utils.aoa_to_sheet(formData);
 
@@ -372,23 +419,24 @@ export default function NoticesPage() {
             { wch: 5 },   // M - Notes
         ];
 
-        // Add merges for title and other elements
-        ws1['!merges'] = [
+        // Common merges
+        merges = [
             // Title merge
             { s: { r: 2, c: 3 }, e: { r: 2, c: 9 } },
             // Legal text merge
             { s: { r: 6, c: 0 }, e: { r: 6, c: 12 } },
-            // Name field merge
+            // Section 1 Name
             { s: { r: 10, c: 1 }, e: { r: 10, c: 8 } },
-            // Declaration merge
-            { s: { r: 49, c: 0 }, e: { r: 49, c: 8 } },
+            // Section 3 Declaration
+            { s: { r: formData.length - 6, c: 0 }, e: { r: formData.length - 6, c: 8 } },
             // Signature line merge
-            { s: { r: 51, c: 0 }, e: { r: 51, c: 8 } },
-            // Note merge
-            { s: { r: 54, c: 1 }, e: { r: 54, c: 12 } },
-            // Note 2 merge
-            { s: { r: 55, c: 0 }, e: { r: 55, c: 12 } },
+            { s: { r: formData.length - 4, c: 0 }, e: { r: formData.length - 4, c: 8 } },
+            // Notes
+            { s: { r: formData.length - 2, c: 1 }, e: { r: formData.length - 2, c: 12 } },
+            { s: { r: formData.length - 1, c: 0 }, e: { r: formData.length - 1, c: 12 } },
         ];
+
+        ws1['!merges'] = merges;
 
         XLSX.utils.book_append_sheet(wb, ws1, '特定技能雇用契約に係る届出書');
 
@@ -440,7 +488,9 @@ export default function NoticesPage() {
         XLSX.utils.book_append_sheet(wb, ws3, '履歴');
 
         // Generate filename with form number
-        const fileName = `様式3-1-1_特定技能雇用契約変更届出_${notice.personName}_${notice.eventDate}.xlsx`;
+        const formCode = noticeTypeInfo?.code?.replace('様式第', '')?.replace('号', '') || '3-1-1';
+        const formName = noticeTypeInfo?.label?.replace('随時届出（', '')?.replace('定期届出（', '')?.replace('届出（', '')?.replace('）', '') || '届出';
+        const fileName = `様式${formCode}_${formName}_${notice.personName}_${notice.eventDate}.xlsx`;
 
         // Download
         XLSX.writeFile(wb, fileName);

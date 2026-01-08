@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
     Briefcase,
     Plus,
@@ -77,7 +78,10 @@ const contractCategories = [
     { value: 'support', label: '登録支援' },
 ];
 
+import ImportDealModal from './ImportDealModal';
+
 export default function DealsPage() {
+    const searchParams = useSearchParams();
     const [deals, setDeals] = useState<Deal[]>([]);
     const [columns, setColumns] = useState<KanbanColumn[]>([]);
     const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -85,6 +89,7 @@ export default function DealsPage() {
     const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
     const [searchQuery, setSearchQuery] = useState('');
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showImportModal, setShowImportModal] = useState(false);
     const [saving, setSaving] = useState(false);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
@@ -100,6 +105,22 @@ export default function DealsPage() {
         probability: 20,
         notes: '',
     });
+
+    const handleImportDeal = (importedData: any) => {
+        setNewDeal(prev => ({
+            ...prev,
+            deal_name: importedData.deal_name || '',
+            client_name: importedData.client_name || '',
+            contract_category: importedData.contract_category || 'dispatch',
+            required_headcount: importedData.required_headcount || 1,
+            expected_start_date: importedData.expected_start_date || '',
+            probability: 90,
+            notes: importedData.notes || '',
+        }));
+        setShowCreateModal(true);
+        setSuccessMessage('営業アプリのデータを取り込みました。');
+        setTimeout(() => setSuccessMessage(null), 4000);
+    };
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -140,6 +161,24 @@ export default function DealsPage() {
             setLoading(false);
         }
     }, []);
+
+    // Handle initial open from URL params
+    useEffect(() => {
+        const create = searchParams?.get('create');
+        const clientName = searchParams?.get('clientName');
+        const clientId = searchParams?.get('clientId');
+
+        if (create === 'true') {
+            if (clientName) {
+                setNewDeal(prev => ({
+                    ...prev,
+                    client_name: decodeURIComponent(clientName),
+                    client_org_id: clientId || ''
+                }));
+            }
+            setShowCreateModal(true);
+        }
+    }, [searchParams]);
 
     useEffect(() => {
         fetchData();
@@ -241,6 +280,12 @@ export default function DealsPage() {
 
     return (
         <div className="space-y-6 animate-fadeIn">
+            <ImportDealModal
+                isOpen={showImportModal}
+                onClose={() => setShowImportModal(false)}
+                onImport={handleImportDeal}
+            />
+
             {/* Success Message */}
             {successMessage && (
                 <div className="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg z-50 animate-fadeIn flex items-center gap-2">
@@ -412,6 +457,14 @@ export default function DealsPage() {
                             <List className="w-4 h-4" />
                         </button>
                     </div>
+                    <button
+                        onClick={() => setShowImportModal(true)}
+                        className="btn btn-secondary border-dashed border-gray-300 hover:border-blue-500 hover:text-blue-600"
+                    >
+                        <FileText className="w-4 h-4 mr-2" />
+                        アプリデータ取込
+                    </button>
+
                     <button
                         onClick={fetchData}
                         className="btn btn-secondary"
